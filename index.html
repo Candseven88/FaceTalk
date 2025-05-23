@@ -7,6 +7,7 @@
   <script type="module">
     import { auth, db, isFirebaseConfigured } from './firebase-config.js';
     import { initCredits } from './credits.js';
+    import { createLivePortraitPrediction, utils } from './liveFaceTalk.js';
     
     // Initialize user credits on first login
     auth.onAuthStateChanged(async user => {
@@ -401,47 +402,86 @@
 
     .preview-container {
       width: 100%;
-      height: 300px;
+      min-height: 300px;
       border: 2px dashed #ccc;
-      margin-top: 12px;
+      margin: 12px 0;
+      padding: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-      overflow: hidden;
-      background-color: #f9f9f9;
+      background: #f8f9fa;
       border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .preview-container img,
+    .preview-container video {
+      max-width: 100%;
+      max-height: 280px;
+      object-fit: contain;
+      display: none;
+    }
+
+    .preview-container img.show,
+    .preview-container video.show {
+      display: block;
+    }
+
+    #generate-portrait-btn {
+      background-color: #cccccc;
+      color: #666666;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: not-allowed;
       transition: all 0.3s ease;
     }
 
-    .preview-container:hover {
-      border-color: #4285f4;
+    #generate-portrait-btn.active {
+      background-color: #4285f4;
+      color: white;
+      cursor: pointer;
     }
 
-    .preview {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
+    #generate-portrait-btn.active:hover {
+      background-color: #3367d6;
+      transform: translateY(-1px);
     }
 
-    .preview.hidden {
-      display: none;
-    }
-
-    .placeholder {
-      color: #888;
-      font-size: 0.9rem;
+    .status {
+      margin: 12px 0;
+      padding: 12px;
+      border-radius: 6px;
       text-align: center;
-      padding: 20px;
     }
 
-    .preview-container:has(.preview:not(.hidden)) .placeholder {
-      display: none;
+    .status.success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+    }
+
+    .status.error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+    }
+
+    .status.estimate {
+      background-color: #e3f2fd;
+      color: #1565c0;
+      border: 1px solid #bbdefb;
     }
 
     @media (max-width: 640px) {
       .preview-container {
-        height: 200px;
+        min-height: 200px;
+      }
+      
+      .preview-container img,
+      .preview-container video {
+        max-height: 180px;
       }
     }
   </style>
@@ -468,8 +508,8 @@
         <label for="portrait-image">Upload Portrait Image (JPG/PNG)</label>
         <input type="file" id="portrait-image" accept="image/jpeg, image/png">
         <div class="preview-container">
-          <img id="portrait-preview" class="preview hidden" alt="Portrait preview">
-          <span class="placeholder">Portrait preview will appear here</span>
+          <img id="portrait-preview" class="preview hidden" alt="Portrait preview" style="max-height: 300px; object-fit: contain;">
+          <div class="placeholder">Portrait preview will appear here</div>
         </div>
       </div>
 
@@ -478,8 +518,8 @@
         <label for="driving-video">Upload Driving Video (MP4)</label>
         <input type="file" id="driving-video" accept="video/mp4">
         <div class="preview-container">
-          <video id="video-preview" class="preview hidden" controls></video>
-          <span class="placeholder">Video preview will appear here</span>
+          <video id="video-preview" class="preview hidden" controls style="max-height: 300px; object-fit: contain;"></video>
+          <div class="placeholder">Video preview will appear here</div>
         </div>
       </div>
       
@@ -488,7 +528,7 @@
       
       <!-- Status and Controls -->
       <div id="status-message" class="status" style="display: none;"></div>
-      <button id="generate-btn" disabled>Generate Animated Portrait</button>
+      <button id="generate-portrait-btn" disabled>Generate Animated Portrait</button>
       
       <!-- Loading State -->
       <div class="loader" id="loader" style="display: none;">
@@ -598,7 +638,7 @@
     const portraitPreview = document.getElementById('portrait-preview');
     const drivingVideo = document.getElementById('driving-video');
     const videoPreview = document.getElementById('video-preview');
-    const generateBtn = document.getElementById('generate-btn');
+    const generateBtn = document.getElementById('generate-portrait-btn');
     const loader = document.getElementById('loader');
     const resultContainer = document.getElementById('result-container');
     const resultVideo = document.getElementById('result-video');
@@ -607,18 +647,21 @@
 
     let uploadedImageUrl = null;
     let uploadedVideoUrl = null;
+    let currentVideoFile = null;
 
     // Handle portrait image upload and preview
     portraitImage.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       
-      // Show preview
-      portraitPreview.src = URL.createObjectURL(file);
-      portraitPreview.classList.remove('hidden');
-      
-      // Upload to imgbb
       try {
+        // 1. 先显示本地预览
+        const objectUrl = URL.createObjectURL(file);
+        portraitPreview.src = objectUrl;
+        portraitPreview.style.display = 'block';
+        portraitPreview.classList.remove('hidden');
+        
+        // 2. 上传到 ImgBB
         generateBtn.disabled = true;
         showStatus('Uploading image...', false);
         
@@ -644,6 +687,8 @@
       } catch (error) {
         console.error('Error uploading image:', error);
         showStatus(`Error uploading image: ${error.message}`, true);
+        // 即使上传失败也保持预览可见
+        portraitPreview.style.display = 'block';
       }
     });
 
@@ -652,40 +697,63 @@
       const file = e.target.files[0];
       if (!file) return;
       
-      // Show preview
-      videoPreview.src = URL.createObjectURL(file);
-      videoPreview.classList.remove('hidden');
-      
       try {
-        // Get video duration for credit estimation
-        const duration = await window.creditSystem.getVideoDuration(file);
+        // 1. 先显示本地预览
+        const objectUrl = URL.createObjectURL(file);
+        videoPreview.src = objectUrl;
+        videoPreview.style.display = 'block';
+        videoPreview.classList.remove('hidden');
+        
+        // 2. 加载视频元数据
+        await new Promise((resolve, reject) => {
+          videoPreview.onloadedmetadata = resolve;
+          videoPreview.onerror = reject;
+          videoPreview.load();
+        });
+        
+        // 3. 计算所需积分
+        const duration = videoPreview.duration;
         const requiredCredits = window.creditSystem.calculateMediaCredits(duration, 'LIVE_PORTRAIT');
         const availableCredits = await window.creditSystem.getUserCredits(auth.currentUser?.uid);
         
-        window.creditSystem.updateCreditEstimate(
-          creditEstimate,
-          requiredCredits,
-          availableCredits,
-          generateBtn
-        );
+        // 4. 更新积分估算显示
+        creditEstimate.style.display = 'block';
+        creditEstimate.textContent = `Estimated cost: ${requiredCredits} credits`;
         
-        uploadedVideoUrl = URL.createObjectURL(file);
+        // 5. 保存视频文件和URL
+        currentVideoFile = file;
+        uploadedVideoUrl = objectUrl;
+        
+        // 6. 检查是否可以激活生成按钮
         checkInputs();
+        
       } catch (error) {
         console.error('Error processing video:', error);
-        showStatus('Error processing video file', true);
+        showStatus('Error loading video. Please try again.', true);
+        // 即使出错也保持预览可见
+        videoPreview.style.display = 'block';
       }
     });
 
     // Check if both files are uploaded
     function checkInputs() {
-      generateBtn.disabled = !(uploadedImageUrl && uploadedVideoUrl);
+      const hasImage = uploadedImageUrl !== null;
+      const hasVideo = uploadedVideoUrl !== null;
+      console.log('Checking inputs:', { hasImage, hasVideo });
+      
+      generateBtn.disabled = !(hasImage && hasVideo);
+      
+      if (hasImage && hasVideo) {
+        generateBtn.classList.add('active');
+      } else {
+        generateBtn.classList.remove('active');
+      }
     }
 
     // Display status message
     function showStatus(message, isError = false) {
       statusMessage.textContent = message;
-      statusMessage.className = isError ? 'status error' : 'status success';
+      statusMessage.className = `status ${isError ? 'error' : 'success'}`;
       statusMessage.style.display = 'block';
       
       if (!isError) {
@@ -697,7 +765,7 @@
 
     // Generate animated portrait
     generateBtn.addEventListener('click', async () => {
-      if (!uploadedImageUrl || !uploadedVideoUrl) {
+      if (!uploadedImageUrl || !currentVideoFile) {
         showStatus('Please upload both image and video files', true);
         return;
       }
@@ -708,35 +776,17 @@
         resultContainer.style.display = 'none';
         showStatus('Generating animated portrait...', false);
         
-        // Get video duration and calculate credits
-        const video = document.createElement('video');
-        video.src = uploadedVideoUrl;
-        await new Promise(resolve => video.addEventListener('loadedmetadata', resolve));
-        
-        const duration = video.duration;
-        const requiredCredits = window.creditSystem.calculateMediaCredits(duration, 'LIVE_PORTRAIT');
-        
-        // Check and deduct credits
-        const hasEnough = await window.creditSystem.checkAndDeductCredits(
-          auth.currentUser.uid,
-          requiredCredits
-        );
-        
-        if (!hasEnough) {
-          throw new Error('Insufficient credits');
-        }
-        
-        // Generate animated portrait
-        const resultVideoUrl = await window.createLivePortraitPrediction(
+        // 调用 Replicate API
+        const resultVideoUrl = await createLivePortraitPrediction(
           uploadedImageUrl,
           uploadedVideoUrl
         );
         
-        // Display result
+        // 显示结果
         resultVideo.src = resultVideoUrl;
         resultContainer.style.display = 'block';
         
-        // Check watermark visibility
+        // 检查水印显示
         const credits = await window.creditSystem.getUserCredits(auth.currentUser.uid);
         resultContainer.querySelector('.watermark').style.display = 
           credits <= 100 ? 'block' : 'none';
@@ -755,6 +805,12 @@
 
     // Clean up object URLs when tab changes
     document.getElementById('tab-voice').addEventListener('click', () => {
+      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
+      if (portraitPreview.src) URL.revokeObjectURL(portraitPreview.src);
+    });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
       if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
       if (portraitPreview.src) URL.revokeObjectURL(portraitPreview.src);
     });

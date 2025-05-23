@@ -1,70 +1,129 @@
 /**
- * Creates a prediction using the live-portrait model on Replicate
- * @param {string} imageUrl - Public URL of the portrait image
- * @param {string} videoUrl - Public URL of the driving video
+ * Live Portrait Generation Module
+ */
+
+const REPLICATE_MODEL_VERSION = "a6ea89def8d2125215e4d2f920d608b171866840f8b5bff3be46c4c1ce9b259b";
+
+/**
+ * Create a live portrait prediction using Replicate API
+ * @param {string} imageUrl - URL of the source image
+ * @param {string} videoUrl - URL of the driving video
  * @returns {Promise<string>} URL of the generated video
  */
-async function createLivePortraitPrediction(imageUrl, videoUrl) {
-  // Get video duration and calculate required credits
-  const duration = await window.creditSystem.getVideoDuration(videoUrl);
-  const requiredCredits = window.creditSystem.calculateMediaCredits(duration, 'LIVE_PORTRAIT');
-  
-  // Get current user
-  const user = firebase.auth().currentUser;
-  if (!user) {
-    throw new Error("User must be logged in to use this feature");
-  }
-  
-  // Check and deduct credits
-  await window.creditSystem.checkAndDeductCredits(user.uid, requiredCredits);
-  
-  // Define API endpoint
-  const endpoint = "https://api.replicate.com/v1/predictions";
-  
-  // Get API key from window object
-  const apiKey = window.REPLICATE_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("Replicate API key not found. Please set window.REPLICATE_API_KEY before calling this function.");
-  }
-  
-  // Set up request options
-  const options = {
-    method: "POST",
-    headers: {
-      "Authorization": `Token ${apiKey}`,
-      "Content-Type": "application/json",
-      "Prefer": "wait"
-    },
-    body: JSON.stringify({
-      version: "a6ea89def8d2125215e4d2f920d608b171866840f8b5bff3be46c4c1ce9b259b",
-      input: {
-        image: imageUrl,
-        video: videoUrl
-      }
-    })
-  };
-  
+export async function createLivePortraitPrediction(imageUrl, videoUrl) {
   try {
-    // Make the API request
-    const response = await fetch(endpoint, options);
-    
-    // Check if response is successful
+    const response = await fetch('https://api.replicate.com/v1/predictions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${window.REPLICATE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'wait'
+      },
+      body: JSON.stringify({
+        version: REPLICATE_MODEL_VERSION,
+        input: {
+          image: imageUrl,
+          video: videoUrl
+        }
+      })
+    });
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`API request failed: ${errorData.error || response.statusText}`);
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate portrait');
     }
+
+    const prediction = await response.json();
     
-    // Parse the response
-    const data = await response.json();
-    
-    // Return the first output URL (the generated video URL)
-    return data.output[0];
+    // If the prediction is still processing, poll for the result
+    if (prediction.status === 'processing') {
+      return await pollPredictionResult(prediction.id);
+    }
+
+    return prediction.output;
   } catch (error) {
-    console.error("Error creating live portrait prediction:", error);
+    console.error('Error in createLivePortraitPrediction:', error);
     throw error;
   }
 }
+
+/**
+ * Poll for prediction results
+ * @param {string} predictionId - ID of the prediction to poll
+ * @returns {Promise<string>} URL of the generated video
+ */
+async function pollPredictionResult(predictionId) {
+  const maxAttempts = 30;
+  const pollInterval = 2000;
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: {
+        'Authorization': `Token ${window.REPLICATE_API_KEY}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to check prediction status');
+    }
+
+    const prediction = await response.json();
+
+    if (prediction.status === 'succeeded') {
+      return prediction.output;
+    }
+
+    if (prediction.status === 'failed') {
+      throw new Error(prediction.error || 'Prediction failed');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    attempts++;
+  }
+
+  throw new Error('Prediction timed out');
+}
+
+// Export utility functions
+export const utils = {
+  /**
+   * Get video duration safely
+   * @param {File} file - Video file
+   * @returns {Promise<number>} Duration in seconds
+   */
+  getVideoDuration: (file) => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      
+      const objectUrl = URL.createObjectURL(file);
+      
+      const cleanup = () => {
+        URL.revokeObjectURL(objectUrl);
+        video.remove();
+      };
+
+      video.onloadedmetadata = () => {
+        cleanup();
+        resolve(video.duration);
+      };
+
+      video.onerror = () => {
+        cleanup();
+        reject(new Error('Failed to load video metadata'));
+      };
+
+      // Set timeout for metadata loading
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Video metadata loading timed out'));
+      }, 10000);
+
+      video.src = objectUrl;
+    });
+  }
+};
 
 // Make the function globally available
 window.createLivePortraitPrediction = createLivePortraitPrediction; 
