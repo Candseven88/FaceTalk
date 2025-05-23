@@ -405,12 +405,13 @@
       min-height: 300px;
       border: 2px dashed #ccc;
       margin: 12px 0;
-      padding: 8px;
+      padding: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
       background: #f8f9fa;
       border-radius: 8px;
+      position: relative;
       overflow: hidden;
     }
 
@@ -422,20 +423,26 @@
       display: none;
     }
 
-    .preview-container img.show,
-    .preview-container video.show {
-      display: block;
+    .preview-container .placeholder {
+      color: #666;
+      font-size: 14px;
+      text-align: center;
     }
 
     #generate-portrait-btn {
-      background-color: #cccccc;
-      color: #666666;
+      background-color: #e0e0e0;
+      color: #666;
       padding: 12px 24px;
       border: none;
       border-radius: 6px;
       font-size: 16px;
+      font-weight: 500;
       cursor: not-allowed;
       transition: all 0.3s ease;
+      width: 100%;
+      max-width: 300px;
+      margin: 20px auto;
+      display: block;
     }
 
     #generate-portrait-btn.active {
@@ -447,6 +454,7 @@
     #generate-portrait-btn.active:hover {
       background-color: #3367d6;
       transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .status {
@@ -649,22 +657,91 @@
     let uploadedVideoUrl = null;
     let currentVideoFile = null;
 
-    // Handle portrait image upload and preview
+    // 文件预览处理函数
+    function createFilePreview(file, previewElement, type = 'image') {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error('No file selected'));
+          return;
+        }
+
+        // 创建安全的文件 URL
+        const fileUrl = window.URL.createObjectURL(file);
+        
+        if (type === 'image') {
+          previewElement.onload = () => {
+            previewElement.style.display = 'block';
+            resolve(fileUrl);
+          };
+          previewElement.onerror = () => {
+            reject(new Error('Failed to load image preview'));
+          };
+          previewElement.src = fileUrl;
+        } else if (type === 'video') {
+          previewElement.onloadeddata = () => {
+            previewElement.style.display = 'block';
+            resolve(fileUrl);
+          };
+          previewElement.onerror = () => {
+            reject(new Error('Failed to load video preview'));
+          };
+          previewElement.src = fileUrl;
+          previewElement.load();
+        }
+      });
+    }
+
+    // 清理文件预览
+    function cleanupFilePreview(url) {
+      if (url) {
+        window.URL.revokeObjectURL(url);
+      }
+    }
+
+    // 状态管理
+    const state = {
+      imageFile: null,
+      videoFile: null,
+      imageUrl: null,
+      videoUrl: null,
+      uploadedImageUrl: null,
+      uploadedVideoUrl: null
+    };
+
+    // 更新按钮状态
+    function updateButtonState() {
+      const hasImage = state.imageFile && state.uploadedImageUrl;
+      const hasVideo = state.videoFile && state.videoUrl;
+      const btn = document.getElementById('generate-portrait-btn');
+      
+      console.log('Updating button state:', { hasImage, hasVideo });
+      
+      if (hasImage && hasVideo) {
+        btn.disabled = false;
+        btn.classList.add('active');
+      } else {
+        btn.disabled = true;
+        btn.classList.remove('active');
+      }
+    }
+
+    // 处理图片上传
     portraitImage.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       try {
-        // 1. 先显示本地预览
-        const objectUrl = URL.createObjectURL(file);
-        portraitPreview.src = objectUrl;
-        portraitPreview.style.display = 'block';
-        portraitPreview.classList.remove('hidden');
+        // 清理旧的预览
+        if (state.imageUrl) {
+          cleanupFilePreview(state.imageUrl);
+        }
+
+        // 创建新的预览
+        state.imageFile = file;
+        state.imageUrl = await createFilePreview(file, portraitPreview, 'image');
         
-        // 2. 上传到 ImgBB
-        generateBtn.disabled = true;
+        // 上传到 ImgBB
         showStatus('Uploading image...', false);
-        
         const formData = new FormData();
         formData.append('image', file);
         formData.append('key', window.IMGBB_API_KEY);
@@ -678,124 +755,77 @@
         
         const data = await response.json();
         if (data.success) {
-          uploadedImageUrl = data.data.url;
+          state.uploadedImageUrl = data.data.url;
           showStatus('Image uploaded successfully!', false);
-          checkInputs();
         } else {
           throw new Error(data.error?.message || 'Upload failed');
         }
       } catch (error) {
-        console.error('Error uploading image:', error);
-        showStatus(`Error uploading image: ${error.message}`, true);
-        // 即使上传失败也保持预览可见
-        portraitPreview.style.display = 'block';
+        console.error('Error handling image:', error);
+        showStatus(`Error: ${error.message}`, true);
+      } finally {
+        updateButtonState();
       }
     });
 
-    // Handle driving video upload and preview
+    // 处理视频上传
     drivingVideo.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       try {
-        // 1. 先显示本地预览
-        const objectUrl = URL.createObjectURL(file);
-        videoPreview.src = objectUrl;
-        videoPreview.style.display = 'block';
-        videoPreview.classList.remove('hidden');
+        // 清理旧的预览
+        if (state.videoUrl) {
+          cleanupFilePreview(state.videoUrl);
+        }
+
+        // 创建新的预览
+        state.videoFile = file;
+        state.videoUrl = await createFilePreview(file, videoPreview, 'video');
         
-        // 2. 加载视频元数据
-        await new Promise((resolve, reject) => {
-          videoPreview.onloadedmetadata = resolve;
-          videoPreview.onerror = reject;
-          videoPreview.load();
-        });
-        
-        // 3. 计算所需积分
+        // 获取视频时长并计算积分
         const duration = videoPreview.duration;
         const requiredCredits = window.creditSystem.calculateMediaCredits(duration, 'LIVE_PORTRAIT');
-        const availableCredits = await window.creditSystem.getUserCredits(auth.currentUser?.uid);
         
-        // 4. 更新积分估算显示
+        // 更新积分显示
         creditEstimate.style.display = 'block';
         creditEstimate.textContent = `Estimated cost: ${requiredCredits} credits`;
         
-        // 5. 保存视频文件和URL
-        currentVideoFile = file;
-        uploadedVideoUrl = objectUrl;
-        
-        // 6. 检查是否可以激活生成按钮
-        checkInputs();
-        
+        // 保存上传的视频 URL
+        state.uploadedVideoUrl = state.videoUrl;
       } catch (error) {
-        console.error('Error processing video:', error);
-        showStatus('Error loading video. Please try again.', true);
-        // 即使出错也保持预览可见
-        videoPreview.style.display = 'block';
+        console.error('Error handling video:', error);
+        showStatus(`Error: ${error.message}`, true);
+      } finally {
+        updateButtonState();
       }
     });
 
-    // Check if both files are uploaded
-    function checkInputs() {
-      const hasImage = uploadedImageUrl !== null;
-      const hasVideo = uploadedVideoUrl !== null;
-      console.log('Checking inputs:', { hasImage, hasVideo });
-      
-      generateBtn.disabled = !(hasImage && hasVideo);
-      
-      if (hasImage && hasVideo) {
-        generateBtn.classList.add('active');
-      } else {
-        generateBtn.classList.remove('active');
-      }
-    }
-
-    // Display status message
-    function showStatus(message, isError = false) {
-      statusMessage.textContent = message;
-      statusMessage.className = `status ${isError ? 'error' : 'success'}`;
-      statusMessage.style.display = 'block';
-      
-      if (!isError) {
-        setTimeout(() => {
-          statusMessage.style.display = 'none';
-        }, 5000);
-      }
-    }
-
-    // Generate animated portrait
+    // 生成按钮点击处理
     generateBtn.addEventListener('click', async () => {
-      if (!uploadedImageUrl || !currentVideoFile) {
+      if (!state.uploadedImageUrl || !state.uploadedVideoUrl) {
         showStatus('Please upload both image and video files', true);
         return;
       }
-      
+
       try {
         generateBtn.disabled = true;
         loader.style.display = 'block';
         resultContainer.style.display = 'none';
         showStatus('Generating animated portrait...', false);
-        
-        // 调用 Replicate API
+
         const resultVideoUrl = await createLivePortraitPrediction(
-          uploadedImageUrl,
-          uploadedVideoUrl
+          state.uploadedImageUrl,
+          state.uploadedVideoUrl
         );
-        
-        // 显示结果
+
         resultVideo.src = resultVideoUrl;
         resultContainer.style.display = 'block';
-        
-        // 检查水印显示
-        const credits = await window.creditSystem.getUserCredits(auth.currentUser.uid);
-        resultContainer.querySelector('.watermark').style.display = 
-          credits <= 100 ? 'block' : 'none';
-        
-        showStatus('Animated portrait generated successfully!', false);
         resultContainer.scrollIntoView({ behavior: 'smooth' });
         
+        showStatus('Animated portrait generated successfully!', false);
       } catch (error) {
-        console.error('Error generating animated portrait:', error);
+        console.error('Error:', error);
         showStatus(`Error: ${error.message}`, true);
       } finally {
         loader.style.display = 'none';
@@ -803,16 +833,10 @@
       }
     });
 
-    // Clean up object URLs when tab changes
-    document.getElementById('tab-voice').addEventListener('click', () => {
-      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
-      if (portraitPreview.src) URL.revokeObjectURL(portraitPreview.src);
-    });
-
-    // Clean up on page unload
+    // 页面卸载时清理资源
     window.addEventListener('beforeunload', () => {
-      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
-      if (portraitPreview.src) URL.revokeObjectURL(portraitPreview.src);
+      cleanupFilePreview(state.imageUrl);
+      cleanupFilePreview(state.videoUrl);
     });
 
     // Voice Cloning Section
