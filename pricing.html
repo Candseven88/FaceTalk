@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceTalk Pro - Pricing</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "facetalk-pro.firebaseapp.com",
+      projectId: "facetalk-pro",
+      storageBucket: "facetalk-pro.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    
+    // Handle payment return
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const plan = params.get('plan');
+      
+      if (plan) {
+        const user = auth.currentUser;
+        if (!user) {
+          // Wait for auth state to be ready
+          await new Promise(resolve => {
+            const unsubscribe = auth.onAuthStateChanged(user => {
+              if (user) {
+                unsubscribe();
+                resolve();
+              }
+            });
+          });
+        }
+        
+        const creditMap = {
+          basic: 250,
+          starter: 530,
+          standard: 1100
+        };
+        
+        const amount = creditMap[plan];
+        if (amount) {
+          try {
+            const userRef = db.collection('users').doc(auth.currentUser.uid);
+            await userRef.update({
+              creditsLeft: firebase.firestore.FieldValue.increment(amount)
+            });
+            
+            // Show success message
+            const notification = document.getElementById('notification');
+            notification.textContent = `✅ Purchase successful! ${amount} credits added.`;
+            notification.style.display = 'block';
+            setTimeout(() => {
+              notification.style.display = 'none';
+            }, 5000);
+            
+            // Remove query params from URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Update displayed credits
+            const creditsDisplay = document.getElementById('credits-display');
+            const userDoc = await userRef.get();
+            creditsDisplay.textContent = `Available credits: ${userDoc.data().creditsLeft}`;
+          } catch (error) {
+            console.error('Error updating credits:', error);
+            alert('Error processing purchase. Please contact support.');
+          }
+        }
+      }
+      
+      // Initialize credits display
+      if (auth.currentUser) {
+        const userDoc = await db.collection('users').doc(auth.currentUser.uid).get();
+        const creditsDisplay = document.getElementById('credits-display');
+        creditsDisplay.textContent = `Available credits: ${userDoc.data()?.creditsLeft || 0}`;
+      }
+    });
+  </script>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+    
+    body {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    
+    h1 {
+      font-size: 2.5rem;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .credits-display {
+      font-size: 1.2rem;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    
+    .pricing-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+    
+    .pricing-card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s ease;
+    }
+    
+    .pricing-card:hover {
+      transform: translateY(-4px);
+    }
+    
+    .plan-name {
+      font-size: 1.5rem;
+      color: #1565c0;
+      margin-bottom: 12px;
+    }
+    
+    .credits {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .price {
+      font-size: 1.8rem;
+      color: #2e7d32;
+      margin-bottom: 24px;
+    }
+    
+    .features {
+      margin-bottom: 24px;
+      color: #666;
+    }
+    
+    .feature {
+      margin: 8px 0;
+    }
+    
+    .buy-button {
+      display: inline-block;
+      background-color: #4285f4;
+      color: white;
+      text-decoration: none;
+      padding: 12px 32px;
+      border-radius: 6px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .buy-button:hover {
+      background-color: #3367d6;
+      transform: translateY(-2px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #4caf50;
+      color: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    .back-link {
+      display: inline-block;
+      color: #666;
+      text-decoration: none;
+      margin-top: 20px;
+    }
+    
+    .back-link:hover {
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>FaceTalk Pro Credits</h1>
+    <div id="credits-display" class="credits-display">Available credits: 0</div>
+  </div>
+  
+  <div class="pricing-container">
+    <!-- Basic Pack -->
+    <div class="pricing-card">
+      <div class="plan-name">Basic Pack</div>
+      <div class="credits">250 Credits</div>
+      <div class="price">$4.99</div>
+      <div class="features">
+        <div class="feature">✨ Perfect for trying out</div>
+        <div class="feature">🎯 ~25 portrait animations</div>
+        <div class="feature">🎤 ~50 voice generations</div>
+        <div class="feature">🗣️ ~12 talking videos</div>
+      </div>
+      <a href="https://www.creem.io/payment/prod_3KM6KH3RcSxoqPMgFIIVtN" class="buy-button">Buy Basic Pack</a>
+    </div>
+    
+    <!-- Starter Pack -->
+    <div class="pricing-card">
+      <div class="plan-name">Starter Pack</div>
+      <div class="credits">530 Credits</div>
+      <div class="price">$9.99</div>
+      <div class="features">
+        <div class="feature">⭐ Most popular choice</div>
+        <div class="feature">🎯 ~53 portrait animations</div>
+        <div class="feature">🎤 ~106 voice generations</div>
+        <div class="feature">🗣️ ~26 talking videos</div>
+      </div>
+      <a href="https://www.creem.io/payment/prod_2SWWhM45WDvaUgJzmqnV8e" class="buy-button">Buy Starter Pack</a>
+    </div>
+    
+    <!-- Standard Pack -->
+    <div class="pricing-card">
+      <div class="plan-name">Standard Pack</div>
+      <div class="credits">1100 Credits</div>
+      <div class="price">$19.99</div>
+      <div class="features">
+        <div class="feature">🌟 Best value for money</div>
+        <div class="feature">🎯 ~110 portrait animations</div>
+        <div class="feature">🎤 ~220 voice generations</div>
+        <div class="feature">🗣️ ~55 talking videos</div>
+      </div>
+      <a href="https://www.creem.io/payment/prod_SLt42iA5O0f6bTsHVJTd1" class="buy-button">Buy Standard Pack</a>
+    </div>
+  </div>
+  
+  <div id="notification" class="notification"></div>
+  
+  <a href="index.html" class="back-link">← Back to FaceTalk Pro</a>
+</body>
+</html> 
