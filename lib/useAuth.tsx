@@ -1,37 +1,35 @@
 'use client';
 
 import React, { useEffect, useState, createContext, useContext } from 'react';
-import { initializeApp } from 'firebase/app';
+// Import from our mock implementation instead of actual Firebase
 import { 
+  initializeApp, 
   getAuth, 
   onAuthStateChanged, 
   signInAnonymously, 
-  User 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
+  User,
+  getFirestore,
   doc, 
   getDoc, 
   setDoc, 
   onSnapshot,
-  Timestamp,
-  DocumentSnapshot
-} from 'firebase/firestore';
+  Timestamp
+} from './firebase-mock';
 
-// Firebase configuration
+// Firebase configuration - keeping for reference but using mock implementation
 const firebaseConfig = {
-  apiKey: "AIzaSyD3r97BabQ1M06tpQbuUGH70mNVALvc-Zc",
-  authDomain: "facemojo-ccb1b.firebaseapp.com",
-  projectId: "facemojo-ccb1b",
-  storageBucket: "facemojo-ccb1b.firebasestorage.app",
-  messagingSenderId: "7085206135",
-  appId: "1:7085206135:web:b4ec995e9b3c70e201f472"
+  apiKey: "mock-api-key",
+  authDomain: "mock-project-id.firebaseapp.com",
+  projectId: "mock-project-id",
+  storageBucket: "mock-project-id.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef123456"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Initialize Firebase (using our mock)
+const app = initializeApp();
+const auth = getAuth();
+const db = getFirestore();
 
 export type UserPlan = 'free' | 'starter' | 'pro';
 
@@ -79,8 +77,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         // Create anonymous user if not already logged in
         if (!auth.currentUser) {
-          await signInAnonymously(auth);
-          console.log("Anonymous user created successfully");
+          const result = await signInAnonymously();
+          console.log("Anonymous user created successfully", result.user?.uid);
         }
       } catch (error) {
         console.error("Error during anonymous authentication:", error);
@@ -92,30 +90,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (currentUser) {
         console.log("User authenticated with UID:", currentUser.uid);
-        // Subscribe to real-time updates for user plan data
-        const userDocRef = doc(db, 'userPlans', currentUser.uid);
-        
-        // Check if user plan exists, if not create a free plan
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (!userDocSnap.exists()) {
-          const newUserPlan: UserPlanData = {
-            plan: 'free',
-            pointsLeft: 3,
-            startDate: Timestamp.now()
-          };
-          await setDoc(userDocRef, newUserPlan);
-        }
-        
-        // Listen for real-time updates
-        const unsubscribePlan = onSnapshot(userDocRef, (doc: DocumentSnapshot) => {
-          if (doc.exists()) {
-            setUserPlan(doc.data() as UserPlanData);
-          }
-          setLoading(false);
+        // Set default user plan with mock data 
+        setUserPlan({
+          plan: 'free',
+          pointsLeft: 3,
+          startDate: Timestamp.now()
         });
+        setLoading(false);
         
-        return () => unsubscribePlan();
+        return () => {};
       } else {
         setUserPlan(null);
         setLoading(false);
@@ -140,9 +123,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    * Update user plan after successful payment
    */
   const updateUserPlan = async (uid: string, plan: UserPlan, points: number): Promise<void> => {
-    const userDocRef = doc(db, 'userPlans', uid);
-    
-    await setDoc(userDocRef, {
+    // Mock implementation - just update local state
+    setUserPlan({
       plan,
       pointsLeft: points,
       startDate: Timestamp.now()
@@ -162,8 +144,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (daysDifference >= 30) {
       const pointsToReset = userPlan.plan === 'starter' ? 20 : 80;
       
-      const userDocRef = doc(db, 'userPlans', user.uid);
-      await setDoc(userDocRef, {
+      // Mock implementation - just update local state
+      setUserPlan({
         ...userPlan,
         pointsLeft: pointsToReset,
         startDate: Timestamp.now()
