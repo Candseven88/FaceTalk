@@ -1,0 +1,5 @@
+This directory contains guide media files for FaceTalk features:
+
+1. live-portrait-guide.gif - Example of Live Portrait Animation usage
+2. voice-cloning-example.mp3 - Example of Voice Cloning result
+3. talking-portrait-guide.gif - Example of Talking Portrait usage 

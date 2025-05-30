@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 240, 242, 245;
+  --background-end-rgb: 255, 255, 255;
+  --primary-blue: 24, 119, 242;
+  --primary-hover: 22, 111, 229;
+  --subtle-bg: 240, 242, 245;
+  --card-border: 229, 231, 235;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--background-start-rgb)),
+    rgb(var(--background-end-rgb))
+  );
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+  
+  button, a {
+    @apply transition-all duration-300;
+  }
+}
+
+@layer components {
+  /* Glassmorphism styles */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-sm border border-white/20 shadow-card;
+  }
+  
+  .glass-navbar {
+    @apply backdrop-blur-md border-b border-white/20;
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+  }
+
+  /* Modern buttons */
+  .btn-primary {
+    @apply bg-facebook-blue text-white px-4 py-2 rounded-lg font-medium 
+    shadow-button hover:shadow-button-hover hover:bg-facebook-hover 
+    transition-all duration-300 transform hover:-translate-y-1;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-facebook-blue border border-facebook-blue/30 px-4 py-2 
+    rounded-lg font-medium shadow-button hover:shadow-button-hover 
+    hover:border-facebook-blue transition-all duration-300 transform hover:-translate-y-1;
+  }
+  
+  /* Card styles */
+  .feature-card {
+    @apply bg-white p-6 rounded-2xl shadow-card hover:shadow-card-hover 
+    transition-all duration-300 border border-gray-100;
+  }
+  
+  .feature-card:hover {
+    @apply transform -translate-y-1;
+  }
+  
+  /* Animated badges */
+  .animated-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
+    bg-primary-100 text-primary-800 animate-pulse;
+  }
+
+  /* Facebook-style card */
+  .facebook-card {
+    @apply bg-white rounded-xl shadow-card border border-gray-200 
+    overflow-hidden transition-all duration-300 hover:shadow-card-hover;
+  }
+}
+
+/* Animated background with subtle gradient movement */
+.animated-bg {
+  background: linear-gradient(-45deg, #3e64fb05, #4f46e505, #2c40b505, #293a8f05);
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Drop zone styling with enhanced animations */
+.drop-zone {
+  position: relative;
+  border: 2px dashed rgba(var(--card-border), 0.7);
+  border-radius: 1rem;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  background: linear-gradient(rgba(255, 255, 255, 0.7), rgba(250, 250, 250, 0.7));
+}
+
+.drop-zone:hover {
+  border-color: rgba(var(--primary-blue), 0.5);
+  background: linear-gradient(rgba(255, 255, 255, 0.8), rgba(250, 250, 250, 0.8));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.07);
+}
+
+.drop-zone.active {
+  border-color: rgb(var(--primary-blue));
+  background-color: rgba(var(--primary-blue), 0.03);
+  transform: scale(1.01);
+  box-shadow: 0 10px 40px rgba(var(--primary-blue), 0.1);
+}
+
+/* Loading animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Progress bar animation */
+.progress-bar {
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 30%;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* Glow effect */
+.glow-effect {
+  position: relative;
+}
+
+.glow-effect::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  z-index: -1;
+  background: linear-gradient(45deg, #3e64fb, #2c40b5);
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.glow-effect:hover::after {
+  opacity: 0.7;
+  filter: blur(15px);
+} 
