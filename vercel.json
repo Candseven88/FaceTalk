@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm install --no-frozen-lockfile && npm run build",
+  "version": 2,
+  "buildCommand": "bash ./build.sh",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "regions": ["hkg1"],
