@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 允许所有已认证用户（包括匿名用户）访问自己的userPlans数据
+    match /userPlans/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // 允许认证用户访问系统设置
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+    }
+  }
+} 
