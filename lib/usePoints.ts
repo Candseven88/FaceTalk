@@ -1,74 +1,77 @@
-import { useAuth } from './useAuth';
+'use client';
+
 import { useState } from 'react';
-import { doc, updateDoc, db } from './firebase';
+import { useAuth } from './useAuth';
+import { doc, updateDoc, Timestamp, db } from './firebase';
 
-// Feature costs mapping
-const FEATURE_COSTS: Record<string, number> = {
-  livePortrait: 2,
-  voiceCloning: 1,
-  talkingPortrait: 4
-};
+// Local storage keys
+const LOCAL_STORAGE_POINTS_KEY = 'facetalk_points';
+const LOCAL_STORAGE_LAST_USED_KEY = 'facetalk_last_used';
 
+/**
+ * Hook for managing feature points
+ */
 export const usePoints = () => {
   const { user, userPlan, canUseFeature } = useAuth();
   const [isDeducting, setIsDeducting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  console.log('usePoints hook initialized, userPlan:', userPlan);
+  // Feature costs
+  const FEATURE_COSTS = {
+    livePortrait: 2,
+    voiceCloning: 1,
+    talkingPortrait: 4,
+  };
 
   /**
-   * Deduct points from user account when using a feature
+   * Deduct points for using a feature
    */
   const deductPoints = async (feature: string): Promise<boolean> => {
     console.log(`Attempting to deduct points for feature: ${feature}`);
+    setIsDeducting(true);
     setError(null);
     
-    if (!user) {
-      console.log('No user found, cannot deduct points');
-      setError('You must be logged in to use this feature');
-      return false;
-    }
-
-    console.log(`Checking if user can use feature: ${feature}, User UID: ${user.uid}`);
-    if (!canUseFeature(feature)) {
-      console.log(`Not enough points to use feature: ${feature}`);
-      setError('Not enough points. Please upgrade your plan.');
-      return false;
-    }
-
-    const cost = FEATURE_COSTS[feature] || 0;
-    console.log(`Feature cost: ${cost}, Current points: ${userPlan?.pointsLeft || 0}`);
-    
     try {
-      setIsDeducting(true);
-      console.log('Starting points deduction process');
+      // Get feature cost
+      const cost = getFeatureCost(feature);
       
-      // Actually deduct points in Firebase
-      if (userPlan) {
-        const newPointsLeft = userPlan.pointsLeft - cost;
-        console.log(`Calculating new points: ${userPlan.pointsLeft} - ${cost} = ${newPointsLeft}`);
-        
-        // Update in Firestore
-        console.log(`Updating points in Firestore for UID: ${user.uid}`);
-        try {
-          await updateDoc(doc(db, 'userPlans', user.uid), {
-            pointsLeft: newPointsLeft
-          });
-          console.log('Points successfully updated in Firestore');
-        } catch (updateError) {
-          console.error('Error updating points in Firestore:', updateError);
-          throw updateError;
-        }
-        
-        console.log(`Successfully deducted ${cost} points. Remaining: ${newPointsLeft}`);
-        return true;
+      // Check if user can use the feature
+      if (!canUseFeature(feature)) {
+        console.log(`User cannot use feature: ${feature} - insufficient points`);
+        setError('Not enough points to use this feature');
+        return false;
       }
       
-      console.log('No user plan found, cannot deduct points');
-      return false;
+      // If user is authenticated, deduct points from Firestore
+      if (user && userPlan) {
+        console.log(`Deducting ${cost} points from authenticated user plan`);
+        try {
+          const userPlanRef = doc(db, 'userPlans', user.uid);
+          const newPointsLeft = Math.max(0, userPlan.pointsLeft - cost);
+          const usedPoints = (userPlan.usedPoints || 0) + cost;
+          
+          // Update Firestore
+          await updateDoc(userPlanRef, {
+            pointsLeft: newPointsLeft,
+            usedPoints: usedPoints,
+            lastUpdated: Timestamp.now()
+          });
+          
+          console.log(`Points deducted successfully. Remaining: ${newPointsLeft}`);
+          return true;
+        } catch (firestoreError) {
+          console.error('Error updating points in Firestore:', firestoreError);
+          // Fall back to local storage
+          return await deductLocalPoints(feature, cost);
+        }
+      } else {
+        // For anonymous users or when Firestore fails, use localStorage
+        console.log('Using localStorage for points tracking');
+        return await deductLocalPoints(feature, cost);
+      }
     } catch (err) {
       console.error('Error deducting points:', err);
-      setError('Failed to deduct points. Please try again.');
+      setError('Failed to process points');
       return false;
     } finally {
       setIsDeducting(false);
@@ -76,28 +79,63 @@ export const usePoints = () => {
   };
 
   /**
-   * Get the remaining points for UI display
+   * Deduct points from localStorage for anonymous users
    */
-  const getRemainingPoints = (): number => {
-    const points = userPlan?.pointsLeft || 0;
-    console.log(`Getting remaining points: ${points}`);
-    return points;
+  const deductLocalPoints = async (feature: string, cost: number): Promise<boolean> => {
+    try {
+      // Get current points from localStorage
+      const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
+      let pointsLeft = storedPoints ? parseInt(storedPoints, 10) : 3; // Default 3 points for anonymous users
+      
+      // If no points left, return false
+      if (pointsLeft < cost) {
+        console.log(`Insufficient local points: ${pointsLeft}/${cost}`);
+        setError('Not enough points to use this feature');
+        return false;
+      }
+      
+      // Deduct points
+      pointsLeft -= cost;
+      localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, pointsLeft.toString());
+      
+      // Track last used timestamp
+      localStorage.setItem(LOCAL_STORAGE_LAST_USED_KEY, new Date().toISOString());
+      
+      console.log(`Local points deducted. Remaining: ${pointsLeft}`);
+      return true;
+    } catch (err) {
+      console.error('Error deducting local points:', err);
+      setError('Failed to process points');
+      return false;
+    }
   };
 
   /**
-   * Get the cost of a specific feature
+   * Get cost of a feature
    */
   const getFeatureCost = (feature: string): number => {
-    const cost = FEATURE_COSTS[feature] || 0;
-    console.log(`Getting cost for feature ${feature}: ${cost}`);
-    return cost;
+    return FEATURE_COSTS[feature as keyof typeof FEATURE_COSTS] || 0;
+  };
+
+  /**
+   * Get remaining points for the user
+   */
+  const getRemainingPoints = (): number => {
+    // If user is authenticated, use Firestore data
+    if (user && userPlan) {
+      return userPlan.pointsLeft;
+    }
+    
+    // Otherwise use localStorage
+    const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
+    return storedPoints ? parseInt(storedPoints, 10) : 3; // Default 3 points
   };
 
   return {
     deductPoints,
     isDeducting,
     error,
-    getRemainingPoints,
-    getFeatureCost
+    getFeatureCost,
+    getRemainingPoints
   };
 }; 

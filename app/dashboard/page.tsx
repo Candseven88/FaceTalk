@@ -4,15 +4,49 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Card from '../components/Card';
 import LoadingState from '../components/LoadingState';
-import { useAuth } from '../../lib/AuthContext';
+import { useAuth } from '../../lib/useAuth';
+import { getUserGenerations } from '../../lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+// 本地存储键名
+const LOCAL_STORAGE_GENERATIONS_KEY = 'facetalk_generations';
+
+// 生成记录类型
+interface Generation {
+  id: string;
+  type: string;
+  result: string;
+  timestamp: any;
+  cost?: number;
+  name?: string;
+  status?: string;
+  userId?: string;
+  local?: boolean; // 标记是否是本地存储的生成记录
+}
+
+// 添加前端展示用的自定义User类型
+interface ExtendedUser {
+  uid: string;
+  userId?: string;
+  name?: string;
+  isAnonymous?: boolean;
+}
+
 export default function Dashboard() {
-  const { user, loading: authLoading, updateUser, logout } = useAuth();
+  const { user, userPlan, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'settings'>('overview');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [generations, setGenerations] = useState<Generation[]>([]);
+  const [isLoadingGenerations, setIsLoadingGenerations] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // 创建扩展的用户对象
+  const extendedUser: ExtendedUser = {
+    uid: user?.uid || '',
+    name: '123', // 默认用户名
+    isAnonymous: true
+  };
   
   // Handle URL params for tab selection
   useEffect(() => {
@@ -25,6 +59,88 @@ export default function Dashboard() {
       setActiveTab('overview');
     }
   }, [searchParams]);
+  
+  // 加载生成历史
+  useEffect(() => {
+    const loadGenerations = async () => {
+      setIsLoadingGenerations(true);
+      
+      try {
+        // 从localStorage获取生成历史
+        const localGenerations: Generation[] = [];
+        try {
+          const localData = localStorage.getItem(LOCAL_STORAGE_GENERATIONS_KEY);
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((item: any) => {
+                if (item && item.type && item.result && item.timestamp) {
+                  localGenerations.push({
+                    ...item,
+                    local: true,
+                    name: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} Generation`,
+                    status: 'completed'
+                  });
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error loading generations from localStorage:', error);
+        }
+        
+        // 如果有用户登录，尝试从Firebase获取生成历史
+        let firebaseGenerations: Generation[] = [];
+        if (user) {
+          try {
+            const results = await getUserGenerations(user.uid);
+            firebaseGenerations = results.map((gen: any) => ({
+              ...gen,
+              name: `${gen.type.charAt(0).toUpperCase() + gen.type.slice(1)} Generation`,
+              status: 'completed'
+            }));
+          } catch (error) {
+            console.error('Error fetching generations from Firebase:', error);
+          }
+        }
+        
+        // 合并本地和Firebase的生成历史，按时间排序
+        let allGenerations = [...localGenerations, ...firebaseGenerations];
+        
+        // 去重（可能有重复的记录，优先保留Firebase记录）
+        const uniqueIds = new Set();
+        allGenerations = allGenerations.filter(gen => {
+          // 如果是本地记录且没有ID，生成一个唯一ID
+          if (gen.local && !gen.id) {
+            gen.id = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          }
+          
+          // 如果已经存在该ID，则忽略
+          if (uniqueIds.has(gen.id)) {
+            return false;
+          }
+          
+          uniqueIds.add(gen.id);
+          return true;
+        });
+        
+        // 按时间排序
+        allGenerations.sort((a, b) => {
+          const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+          const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+          return dateB.getTime() - dateA.getTime();
+        });
+        
+        setGenerations(allGenerations);
+      } catch (error) {
+        console.error('Error loading generations:', error);
+      } finally {
+        setIsLoadingGenerations(false);
+      }
+    };
+    
+    loadGenerations();
+  }, [user]);
   
   // Redirect if not authenticated
   useEffect(() => {
@@ -61,42 +177,7 @@ export default function Dashboard() {
       transition: { duration: 0.4 }
     }
   };
-
-  // Function to add a new generation (simulate)
-  const handleAddNewGeneration = () => {
-    // Create a new generation object
-    const newGeneration = {
-      id: `gen_${Date.now()}`,
-      type: ['Talking Avatar', 'Voice Clone', 'Live Portrait'][Math.floor(Math.random() * 3)],
-      name: 'New Test Generation',
-      date: new Date().toISOString().split('T')[0],
-      fileSize: `${(Math.random() * 20).toFixed(1)} MB`,
-      status: 'processing',
-      thumbnail: '/thumbnails/new-gen.jpg'
-    };
-    
-    // Update user data with new generation
-    if (user) {
-      const updatedGenerations = [newGeneration, ...user.recentGenerations];
-      const creditsUsed = user.credits.used + 1;
-      const creditsRemaining = user.credits.total - creditsUsed;
-      
-      updateUser({
-        recentGenerations: updatedGenerations,
-        credits: {
-          ...user.credits,
-          used: creditsUsed,
-          remaining: creditsRemaining
-        }
-      });
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
-
+  
   // Handle tab change with URL update
   const handleTabChange = (tab: 'overview' | 'history' | 'settings') => {
     setActiveTab(tab);
@@ -109,6 +190,42 @@ export default function Dashboard() {
     
     router.push(`/dashboard${params.toString() ? `?${params.toString()}` : ''}`);
   };
+  
+  // 格式化日期
+  const formatDate = (timestamp: any): string => {
+    try {
+      const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+      return date.toLocaleDateString();
+    } catch (e) {
+      return 'Unknown date';
+    }
+  };
+  
+  // 打开生成结果
+  const viewGeneration = (generation: Generation) => {
+    if (generation.result) {
+      window.open(generation.result, '_blank');
+    }
+  };
+  
+  // 下载生成结果
+  const downloadGeneration = (generation: Generation) => {
+    if (generation.result) {
+      const link = document.createElement('a');
+      link.href = generation.result;
+      link.download = `${generation.type}-${generation.id}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // 计算已使用的点数
+  const usedPoints = userPlan?.usedPoints || 0;
+  // 计算总点数
+  const totalPoints = (userPlan?.pointsLeft || 0) + usedPoints;
+  // 计算使用百分比
+  const usagePercent = totalPoints > 0 ? (usedPoints / totalPoints) * 100 : 0;
 
   return (
     <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg min-h-screen">
@@ -120,8 +237,8 @@ export default function Dashboard() {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
-            <p className="text-gray-600 mt-2">User ID: {user.userId}</p>
+            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {extendedUser.name}!</h1>
+            <p className="text-gray-600 mt-2">User ID: {extendedUser.uid}</p>
           </motion.div>
         </div>
 
@@ -181,11 +298,11 @@ export default function Dashboard() {
                 <Card title="Current Subscription" subtitle="Your plan details">
                   <div className="mt-2">
                     <div className="inline-block bg-blue-100 text-facebook-blue text-sm font-semibold px-2.5 py-0.5 rounded-full mb-2">
-                      {user.plan}
+                      {userPlan?.plan || 'Free Trial'}
                     </div>
-                    <p className="text-sm text-gray-600">Next billing: <span className="font-medium text-gray-900">{user.nextBilling}</span></p>
+                    <p className="text-sm text-gray-600">Next billing: <span className="font-medium text-gray-900">2025-06-30</span></p>
                     <div className="mt-4">
-                      <button className="btn-secondary text-sm px-3 py-1.5">
+                      <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
                         Manage Subscription
                       </button>
                     </div>
@@ -198,22 +315,24 @@ export default function Dashboard() {
                   <div className="mt-4 space-y-4">
                     <div>
                       <div className="flex justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700">Credits used: {user.credits.used}/{user.credits.total}</span>
-                        <span className="text-sm font-medium text-facebook-blue">{user.credits.remaining} remaining</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          Credits used: {usedPoints}/{totalPoints || 10}
+                        </span>
+                        <span className="text-sm font-medium text-facebook-blue">{userPlan?.pointsLeft || 10} remaining</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div 
                           className="bg-facebook-blue h-2.5 rounded-full"
-                          style={{ width: `${(user.credits.used / user.credits.total) * 100}%` }}
+                          style={{ width: `${usagePercent}%` }}
                         ></div>
                       </div>
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
                       <div>
                         <span className="block font-medium text-gray-900 mb-1">Credits reset monthly</span>
-                        <span>Next reset on {user.nextBilling}</span>
+                        <span>Next reset on 2025-06-30</span>
                       </div>
-                      <button className="btn-primary text-sm px-3 py-1.5">
+                      <button className="btn-primary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
                         Get More Credits
                       </button>
                     </div>
@@ -222,49 +341,30 @@ export default function Dashboard() {
               </motion.div>
             </div>
 
-            {/* Active Processes */}
-            {user.activeProcesses.length > 0 && (
-              <motion.div variants={itemVariants} className="mb-8">
-                <Card title="Active Processes" subtitle="Currently running generations">
-                  <div className="mt-4 space-y-4">
-                    {user.activeProcesses.map((process) => (
-                      <div key={process.id} className="bg-gray-50 p-4 rounded-lg">
-                        <div className="flex justify-between mb-2">
-                          <h4 className="font-medium text-gray-900">{process.name}</h4>
-                          <span className="text-sm text-facebook-blue">{process.type}</span>
-                        </div>
-                        <LoadingState 
-                          type="progress" 
-                          message={`Generating ${process.type.toLowerCase()}`} 
-                          progress={process.progress} 
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              </motion.div>
-            )}
-
             {/* Recent Generations */}
             <motion.div variants={itemVariants}>
               <Card title="Recent Generations" subtitle="Your latest creations" className="overflow-hidden">
                 <div className="flex justify-end mb-4">
                   <button 
-                    onClick={handleAddNewGeneration}
+                    onClick={() => router.push('/live-portrait')}
                     className="text-sm btn-secondary px-3 py-1.5 flex items-center"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    Create Test Generation
+                    Create New Generation
                   </button>
                 </div>
                 
-                {user.recentGenerations.length === 0 ? (
+                {isLoadingGenerations ? (
+                  <div className="text-center py-8">
+                    <LoadingState type="spinner" message="Loading your generations..." />
+                  </div>
+                ) : generations.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <p>You haven't created any generations yet.</p>
                     <button 
-                      onClick={handleAddNewGeneration}
+                      onClick={() => router.push('/live-portrait')}
                       className="mt-4 btn-primary"
                     >
                       Create Your First Generation
@@ -277,19 +377,16 @@ export default function Dashboard() {
                         <thead className="bg-gray-50">
                           <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Name
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Type
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Date
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Size
+                              Cost
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Status
+                              Storage
                             </th>
                             <th scope="col" className="relative px-6 py-3">
                               <span className="sr-only">Actions</span>
@@ -297,34 +394,41 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {user.recentGenerations.slice(0, 3).map((generation) => (
+                          {generations.slice(0, 3).map((generation) => (
                             <tr key={generation.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{generation.name}</div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {generation.type.charAt(0).toUpperCase() + generation.type.slice(1)}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.type}</div>
+                                <div className="text-sm text-gray-500">{formatDate(generation.timestamp)}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.date}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.fileSize}</div>
+                                <div className="text-sm text-gray-500">{generation.cost || 2} points</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  generation.status === 'completed' 
-                                    ? 'bg-green-100 text-green-800'
-                                    : generation.status === 'processing'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-yellow-100 text-yellow-800'
+                                  generation.local
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {generation.status}
+                                  {generation.local ? 'Local' : 'Cloud'}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button className="text-facebook-blue hover:text-facebook-hover">View</button>
-                                <button className="text-facebook-blue hover:text-facebook-hover ml-4">Download</button>
+                                <button 
+                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
+                                  onClick={() => viewGeneration(generation)}
+                                >
+                                  View
+                                </button>
+                                <button 
+                                  className="text-facebook-blue hover:text-facebook-hover"
+                                  onClick={() => downloadGeneration(generation)}
+                                >
+                                  Download
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -332,7 +436,7 @@ export default function Dashboard() {
                       </table>
                     </div>
                     
-                    {user.recentGenerations.length > 3 && (
+                    {generations.length > 3 && (
                       <div className="text-center bg-gray-50 py-3 border-t border-gray-200">
                         <button 
                           onClick={() => handleTabChange('history')}
@@ -358,11 +462,15 @@ export default function Dashboard() {
           >
             <motion.div variants={itemVariants}>
               <Card className="overflow-hidden">
-                {user.recentGenerations.length === 0 ? (
+                {isLoadingGenerations ? (
+                  <div className="text-center py-8">
+                    <LoadingState type="spinner" message="Loading your generations..." />
+                  </div>
+                ) : generations.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <p>You haven't created any generations yet.</p>
                     <button 
-                      onClick={handleAddNewGeneration}
+                      onClick={() => router.push('/live-portrait')}
                       className="mt-4 btn-primary"
                     >
                       Create Your First Generation
@@ -375,15 +483,10 @@ export default function Dashboard() {
                       <div className="flex items-center space-x-2">
                         <select className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-facebook-blue">
                           <option value="all">All Types</option>
-                          <option value="live-portrait">Live Portrait</option>
-                          <option value="voice-clone">Voice Clone</option>
-                          <option value="talking-avatar">Talking Avatar</option>
+                          <option value="livePortrait">Live Portrait</option>
+                          <option value="voiceClone">Voice Clone</option>
+                          <option value="talkingPortrait">Talking Avatar</option>
                         </select>
-                        <button className="bg-gray-100 p-1.5 rounded-lg text-gray-500 hover:text-facebook-blue">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                          </svg>
-                        </button>
                       </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -391,19 +494,16 @@ export default function Dashboard() {
                         <thead className="bg-gray-50">
                           <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Name
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Type
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Date
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Size
+                              Cost
                             </th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Status
+                              Storage
                             </th>
                             <th scope="col" className="relative px-6 py-3">
                               <span className="sr-only">Actions</span>
@@ -411,35 +511,41 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {user.recentGenerations.map((generation) => (
+                          {generations.map((generation) => (
                             <tr key={generation.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{generation.name}</div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {generation.type.charAt(0).toUpperCase() + generation.type.slice(1)}
+                                </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.type}</div>
+                                <div className="text-sm text-gray-500">{formatDate(generation.timestamp)}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.date}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.fileSize}</div>
+                                <div className="text-sm text-gray-500">{generation.cost || 2} points</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  generation.status === 'completed' 
-                                    ? 'bg-green-100 text-green-800'
-                                    : generation.status === 'processing'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-yellow-100 text-yellow-800'
+                                  generation.local
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-green-100 text-green-800'
                                 }`}>
-                                  {generation.status}
+                                  {generation.local ? 'Local' : 'Cloud'}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button className="text-facebook-blue hover:text-facebook-hover">View</button>
-                                <button className="text-facebook-blue hover:text-facebook-hover ml-4">Download</button>
-                                <button className="text-red-500 hover:text-red-700 ml-4">Delete</button>
+                                <button 
+                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
+                                  onClick={() => viewGeneration(generation)}
+                                >
+                                  View
+                                </button>
+                                <button 
+                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
+                                  onClick={() => downloadGeneration(generation)}
+                                >
+                                  Download
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -448,15 +554,7 @@ export default function Dashboard() {
                     </div>
                     
                     <div className="flex justify-between items-center bg-gray-50 px-6 py-3 border-t border-gray-200">
-                      <span className="text-sm text-gray-500">Showing {user.recentGenerations.length} items</span>
-                      <div className="flex space-x-1">
-                        <button className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50" disabled>
-                          Previous
-                        </button>
-                        <button className="px-3 py-1 border border-gray-300 rounded-md text-sm bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50" disabled>
-                          Next
-                        </button>
-                      </div>
+                      <span className="text-sm text-gray-500">Showing {generations.length} items</span>
                     </div>
                   </div>
                 )}
@@ -479,66 +577,28 @@ export default function Dashboard() {
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Profile Information</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="name" className="block text-sm text-gray-600 mb-1">Full Name</label>
+                        <label htmlFor="name" className="block text-sm text-gray-600 mb-1">Display Name</label>
                         <input 
                           type="text" 
                           id="name" 
-                          defaultValue={user.name}
+                          defaultValue="123"
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-facebook-blue focus:border-facebook-blue"
                         />
                       </div>
                       <div>
-                        <label htmlFor="email" className="block text-sm text-gray-600 mb-1">Email Address</label>
+                        <label htmlFor="uid" className="block text-sm text-gray-600 mb-1">User ID (cannot change)</label>
                         <input 
-                          type="email" 
-                          id="email" 
-                          defaultValue={user.email}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-facebook-blue focus:border-facebook-blue"
+                          type="text" 
+                          id="uid" 
+                          defaultValue={extendedUser.uid}
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
                         />
                       </div>
                     </div>
                   </div>
                   
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Notification Preferences</h4>
-                    <div className="space-y-2">
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input 
-                            id="notifications-email" 
-                            type="checkbox" 
-                            defaultChecked
-                            className="h-4 w-4 text-facebook-blue focus:ring-facebook-blue border-gray-300 rounded"
-                          />
-                        </div>
-                        <div className="ml-3 text-sm">
-                          <label htmlFor="notifications-email" className="font-medium text-gray-700">Email Notifications</label>
-                          <p className="text-gray-500">Receive email updates when your generations are complete</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input 
-                            id="notifications-marketing" 
-                            type="checkbox" 
-                            className="h-4 w-4 text-facebook-blue focus:ring-facebook-blue border-gray-300 rounded"
-                          />
-                        </div>
-                        <div className="ml-3 text-sm">
-                          <label htmlFor="notifications-marketing" className="font-medium text-gray-700">Marketing Communications</label>
-                          <p className="text-gray-500">Receive updates about new features and promotions</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4 border-t border-gray-200 flex justify-between">
-                    <button 
-                      onClick={() => setShowLogoutConfirm(true)}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium"
-                    >
-                      Logout
-                    </button>
+                  <div className="pt-4 border-t border-gray-200 flex justify-end">
                     <button className="btn-primary">
                       Save Changes
                     </button>
@@ -547,30 +607,6 @@ export default function Dashboard() {
               </Card>
             </motion.div>
           </motion.div>
-        )}
-
-        {/* Logout Confirmation Dialog */}
-        {showLogoutConfirm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Logout</h3>
-              <p className="text-gray-600 mb-6">Are you sure you want to log out of your account?</p>
-              <div className="flex justify-end space-x-3">
-                <button 
-                  onClick={() => setShowLogoutConfirm(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleLogout}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          </div>
         )}
       </div>
     </div>

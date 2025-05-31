@@ -1,9 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { fileToBase64, validateFileSize, pollPrediction } from '../utils';
 import { PredictionResponse } from '../types';
 import { usePoints } from '../../lib/usePoints';
+import { useAuth } from '../../lib/useAuth';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
+import { saveGeneration, updateUsageStats } from '../../lib/firebase';
+
+// 本地存储键名
+const LOCAL_STORAGE_GENERATION_KEY = 'facetalk_last_generation';
+const LOCAL_STORAGE_GENERATIONS_KEY = 'facetalk_generations';
 
 export default function LivePortrait() {
   const [portraitFile, setPortraitFile] = useState<File | null>(null);
@@ -14,15 +20,41 @@ export default function LivePortrait() {
   const [progress, setProgress] = useState<string>('');
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSavingResult, setIsSavingResult] = useState(false);
   
   const portraitInputRef = useRef<HTMLInputElement>(null);
   const drivingInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
+  const { user } = useAuth();
   
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
   const featureCost = getFeatureCost('livePortrait');
+
+  // 从本地存储恢复上次生成的结果
+  useEffect(() => {
+    const lastGeneration = localStorage.getItem(LOCAL_STORAGE_GENERATION_KEY);
+    if (lastGeneration) {
+      try {
+        const { result, timestamp } = JSON.parse(lastGeneration);
+        // 检查是否是最近24小时内的生成结果
+        const generationTime = new Date(timestamp).getTime();
+        const currentTime = new Date().getTime();
+        const hoursDiff = (currentTime - generationTime) / (1000 * 60 * 60);
+        
+        if (hoursDiff < 24 && result) {
+          console.log('Restoring last generation result from localStorage');
+          setVideoResult(result);
+        } else {
+          // 如果超过24小时，清除本地存储
+          localStorage.removeItem(LOCAL_STORAGE_GENERATION_KEY);
+        }
+      } catch (error) {
+        console.error('Error parsing last generation from localStorage:', error);
+      }
+    }
+  }, []);
 
   // How-to-use steps
   const howToUseSteps = [
@@ -73,6 +105,60 @@ export default function LivePortrait() {
         setError('Failed to process driving video');
         console.error(err);
       }
+    }
+  };
+
+  // 保存生成结果到localStorage
+  const saveGenerationToLocalStorage = (result: string) => {
+    const generationData = {
+      result,
+      timestamp: new Date().toISOString(),
+      type: 'livePortrait'
+    };
+    
+    // 保存最后一次生成结果
+    localStorage.setItem(LOCAL_STORAGE_GENERATION_KEY, JSON.stringify(generationData));
+    
+    // 添加到生成历史
+    try {
+      const localGenerations = JSON.parse(localStorage.getItem(LOCAL_STORAGE_GENERATIONS_KEY) || '[]');
+      localGenerations.unshift({
+        id: `local_${Date.now()}`,
+        ...generationData
+      });
+      
+      // 最多保存10个
+      if (localGenerations.length > 10) {
+        localGenerations.pop();
+      }
+      
+      localStorage.setItem(LOCAL_STORAGE_GENERATIONS_KEY, JSON.stringify(localGenerations));
+      console.log('Generation saved to localStorage');
+    } catch (error) {
+      console.error('Error saving generation to localStorage:', error);
+    }
+  };
+
+  // 保存生成结果到Firestore
+  const saveGenerationToFirestore = async (result: string) => {
+    if (!user) {
+      console.log('No user found, skipping Firestore save');
+      return;
+    }
+    
+    setIsSavingResult(true);
+    try {
+      // 保存到Firestore
+      const generationId = await saveGeneration(user.uid, 'livePortrait', result, featureCost);
+      
+      // 更新用户使用统计
+      await updateUsageStats(user.uid, featureCost);
+      
+      console.log('Generation saved to Firestore with ID:', generationId);
+    } catch (error) {
+      console.error('Error saving generation to Firestore:', error);
+    } finally {
+      setIsSavingResult(false);
     }
   };
 
@@ -137,6 +223,12 @@ export default function LivePortrait() {
           ? result.output[0] 
           : result.output;
         setVideoResult(outputUrl);
+        
+        // 保存结果到localStorage
+        saveGenerationToLocalStorage(outputUrl);
+        
+        // 保存结果到Firestore
+        await saveGenerationToFirestore(outputUrl);
       } else {
         throw new Error('No output generated');
       }
@@ -172,6 +264,11 @@ export default function LivePortrait() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // 查看历史生成
+  const handleViewHistory = () => {
+    router.push('/dashboard');
   };
 
   return (
@@ -272,6 +369,15 @@ export default function LivePortrait() {
         >
           Reset
         </button>
+        
+        {videoResult && (
+          <button
+            onClick={handleViewHistory}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          >
+            View History
+          </button>
+        )}
       </div>
 
       {/* Progress Display */}
@@ -308,13 +414,23 @@ export default function LivePortrait() {
               className="w-full max-h-[500px]"
             />
           </div>
-          <div className="mt-4">
+          <div className="mt-4 flex gap-4">
             <button
               onClick={handleDownload}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
             >
               Download Video
             </button>
+            
+            {isSavingResult && (
+              <p className="text-sm text-gray-600 flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Saving result...
+              </p>
+            )}
           </div>
         </div>
       )}
