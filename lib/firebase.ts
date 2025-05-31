@@ -4,6 +4,14 @@ import {
   getAuth, 
   onAuthStateChanged as firebaseOnAuthStateChanged, 
   signInAnonymously as firebaseSignInAnonymously,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  sendPasswordResetEmail,
+  linkWithCredential,
+  EmailAuthProvider,
   User 
 } from 'firebase/auth';
 import { 
@@ -20,8 +28,21 @@ import {
   where,
   orderBy,
   limit,
-  getDocs
+  getDocs,
+  deleteDoc,
+  runTransaction,
+  serverTimestamp,
+  increment
 } from 'firebase/firestore';
+import { 
+  getStorage as firebaseGetStorage, 
+  ref as storageRef, 
+  uploadString, 
+  getDownloadURL,
+  uploadBytes,
+  deleteObject
+} from 'firebase/storage';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Firebase configuration from environment variables
 const firebaseConfig = {
@@ -53,8 +74,11 @@ try {
   throw new Error('Firebase initialization failed');
 }
 
+// Initialize Firebase services
 const auth = getAuth(app);
 const db = firebaseGetFirestore(app);
+const storage = firebaseGetStorage(app);
+const functions = getFunctions(app);
 
 console.log('Firebase auth and db setup complete');
 
@@ -131,23 +155,145 @@ export const updateUsageStats = async (userId: string, pointsUsed: number) => {
   }
 };
 
+// 保存用户反馈
+export const saveUserFeedback = async (userId: string, feedback: any) => {
+  try {
+    const feedbackData = {
+      userId: userId || 'anonymous',
+      ...feedback,
+      createdAt: serverTimestamp(),
+      status: 'new'
+    };
+    
+    const docRef = await addDoc(collection(db, 'feedback'), feedbackData);
+    console.log('Feedback saved with ID:', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error saving feedback:', error);
+    return null;
+  }
+};
+
+// 处理用户订阅
+export const processSubscription = async (userId: string, plan: string) => {
+  try {
+    // 确定积分和等级
+    let credits = 0;
+    switch (plan) {
+      case 'basic':
+        credits = 10;
+        break;
+      case 'pro':
+        credits = 40;
+        break;
+      default:
+        throw new Error('Invalid plan');
+    }
+    
+    // 更新用户文档
+    const userRef = doc(db, 'userPlans', userId);
+    
+    await runTransaction(db, async (transaction) => {
+      // 获取当前用户数据
+      const userDoc = await transaction.get(userRef);
+      
+      // 准备更新数据
+      const userData = {
+        plan,
+        pointsLeft: credits,
+        subscriptionActive: true,
+        subscriptionPlan: plan,
+        subscriptionStart: serverTimestamp(),
+        features: {
+          livePortrait: true,
+          voiceCloning: true,
+          talkingAvatar: true
+        },
+        lastUpdated: serverTimestamp()
+      };
+      
+      // 如果用户文档已存在，保留现有字段
+      if (userDoc.exists()) {
+        transaction.update(userRef, userData);
+      } else {
+        transaction.set(userRef, {
+          ...userData,
+          usedPoints: 0,
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      // 记录交易
+      const transactionRef = doc(collection(db, 'transactions'));
+      transaction.set(transactionRef, {
+        userId,
+        type: 'subscription',
+        plan,
+        credits,
+        amount: plan === 'basic' ? 5 : 15,
+        timestamp: serverTimestamp(),
+        status: 'completed'
+      });
+    });
+    
+    console.log(`Subscription processed for user ${userId}, plan: ${plan}`);
+    return { success: true, credits, plan };
+  } catch (error) {
+    console.error('Error processing subscription:', error);
+    throw error;
+  }
+};
+
+// 升级匿名用户为正式账户
+export const upgradeAnonymousUser = async (email: string, password: string) => {
+  if (!auth.currentUser) {
+    throw new Error('No current user');
+  }
+  
+  if (!auth.currentUser.isAnonymous) {
+    throw new Error('Current user is not anonymous');
+  }
+  
+  try {
+    const credential = EmailAuthProvider.credential(email, password);
+    const result = await linkWithCredential(auth.currentUser, credential);
+    console.log('Anonymous account successfully upgraded', result.user);
+    return result.user;
+  } catch (error) {
+    console.error('Error upgrading anonymous account:', error);
+    throw error;
+  }
+};
+
 // Export Firebase services with the same interface as the mock
 export { 
   app, 
   auth, 
   db, 
+  storage,
+  functions,
   doc, 
   getDoc, 
   setDoc, 
   updateDoc, 
-  Timestamp, 
+  Timestamp,
+  serverTimestamp,
   collection,
   addDoc,
   query,
   where,
   orderBy,
   limit,
-  getDocs
+  getDocs,
+  deleteDoc,
+  runTransaction,
+  increment,
+  storageRef,
+  uploadString,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  httpsCallable
 };
 
 // Auth helpers
@@ -164,7 +310,31 @@ export const signInAnonymously = () => {
       throw error;
     });
 };
+
+// Extended auth functions
+export const createUser = (email: string, password: string) => {
+  return createUserWithEmailAndPassword(auth, email, password);
+};
+
+export const signIn = (email: string, password: string) => {
+  return signInWithEmailAndPassword(auth, email, password);
+};
+
+export const signInWithGoogle = () => {
+  const provider = new GoogleAuthProvider();
+  return signInWithPopup(auth, provider);
+};
+
+export const resetPassword = (email: string) => {
+  return sendPasswordResetEmail(auth, email);
+};
+
+export const logOut = () => {
+  return signOut(auth);
+};
+
 export const getFirestore = () => db;
+export const getStorage = () => storage;
 
 // Re-export User type
 export type { User };
@@ -174,11 +344,14 @@ export default {
   app,
   auth,
   db,
+  storage,
+  functions,
   doc,
   getDoc,
   setDoc,
   updateDoc,
   Timestamp,
+  serverTimestamp,
   collection,
   addDoc,
   query,
@@ -186,7 +359,22 @@ export default {
   orderBy,
   limit,
   getDocs,
+  deleteDoc,
+  runTransaction,
+  increment,
+  storageRef,
+  uploadString,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+  httpsCallable,
   onAuthStateChanged: firebaseOnAuthStateChanged,
   signInAnonymously: () => firebaseSignInAnonymously(auth),
-  getFirestore: () => db
+  createUser: (email: string, password: string) => createUserWithEmailAndPassword(auth, email, password),
+  signIn: (email: string, password: string) => signInWithEmailAndPassword(auth, email, password),
+  signInWithGoogle: () => signInWithPopup(auth, new GoogleAuthProvider()),
+  resetPassword: (email: string) => sendPasswordResetEmail(auth, email),
+  logOut: () => signOut(auth),
+  getFirestore: () => db,
+  getStorage: () => storage
 }; 

@@ -19,24 +19,6 @@ export const usePoints = () => {
 
   console.log('usePoints hook initialized, userPlan:', userPlan);
 
-  // 启用无限积分模式函数
-  const enableUnlimitedPoints = () => {
-    localStorage.setItem('dev_unlimited_points', 'true');
-    localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, '999');
-    console.log('🎮 开发模式：已启用无限积分！');
-    window.location.reload();
-  };
-
-  // 如果URL中包含dev_unlimited=true参数，自动启用无限积分
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('dev_unlimited') === 'true') {
-        enableUnlimitedPoints();
-      }
-    }
-  }, []);
-
   // 从localStorage初始化或使用userPlan更新本地点数
   useEffect(() => {
     if (userPlan) {
@@ -74,13 +56,6 @@ export const usePoints = () => {
    */
   const deductPoints = async (feature: string): Promise<boolean> => {
     console.log(`Attempting to deduct points for feature: ${feature}`);
-    
-    // 在开发环境中，始终允许使用功能而不扣除积分
-    if (typeof window !== 'undefined' && localStorage.getItem('dev_unlimited_points') === 'true') {
-      console.log('Development mode: Allowing feature use without deducting points');
-      return true;
-    }
-    
     setIsDeducting(true);
     setError(null);
     
@@ -189,7 +164,6 @@ export const usePoints = () => {
     isDeducting,
     error,
     getFeatureCost,
-    getRemainingPoints,
-    enableUnlimitedPoints
+    getRemainingPoints
   };
 }; 
