@@ -103,7 +103,7 @@ export const useProgressTracking = () => {
           const updatedTask: ProgressTask = {
             ...task,
             progress,
-            status: 'processing' as const,
+            status: 'processing',
             lastUpdated: now
           };
           
@@ -131,7 +131,7 @@ export const useProgressTracking = () => {
         if (task.id === id) {
           const updatedTask: ProgressTask = {
             ...task,
-            status: 'completed' as const,
+            status: 'completed',
             progress: 'Completed',
             output,
             lastUpdated: now
@@ -161,7 +161,7 @@ export const useProgressTracking = () => {
         if (task.id === id) {
           const updatedTask: ProgressTask = {
             ...task,
-            status: 'failed' as const,
+            status: 'failed',
             progress: 'Failed',
             error,
             lastUpdated: now
@@ -187,7 +187,7 @@ export const useProgressTracking = () => {
     try {
       const taskJson = localStorage.getItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`);
       if (taskJson) {
-        return JSON.parse(taskJson);
+        return JSON.parse(taskJson) as ProgressTask;
       }
     } catch (error) {
       console.error(`Error getting task ${id}:`, error);
