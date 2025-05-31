@@ -37,9 +37,10 @@ export const usePoints = () => {
         setLocalPointsLeft(points);
       } else {
         // 没有localStorage数据，设置默认值
-        console.log('No points in localStorage, using default 100');
-        setLocalPointsLeft(100);
-        localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, '100');
+        console.log('No points in localStorage, using default 4');
+        const defaultPoints = 4;
+        setLocalPointsLeft(defaultPoints);
+        localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, defaultPoints.toString());
       }
     }
   }, [userPlan]);
@@ -63,9 +64,13 @@ export const usePoints = () => {
       // Get feature cost
       const cost = getFeatureCost(feature);
       
-      // Check if user can use the feature
-      if (!canUseFeature(feature)) {
-        console.log(`User cannot use feature: ${feature} - insufficient points`);
+      // 获取当前可用积分
+      const currentPoints = getRemainingPoints();
+      console.log(`Current points: ${currentPoints}, Cost: ${cost}`);
+      
+      // 检查是否有足够的积分
+      if (currentPoints < cost) {
+        console.log(`Insufficient points: ${currentPoints}/${cost}`);
         setError('Not enough points to use this feature');
         return false;
       }
@@ -113,7 +118,7 @@ export const usePoints = () => {
     try {
       // Get current points from localStorage
       const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
-      let pointsLeft = storedPoints ? parseInt(storedPoints, 10) : 100; // Default 100 points for anonymous users
+      let pointsLeft = storedPoints ? parseInt(storedPoints, 10) : 4; // Default 4 points for anonymous users
       
       // If no points left, return false
       if (pointsLeft < cost) {
@@ -156,7 +161,14 @@ export const usePoints = () => {
     
     // Otherwise use localStorage
     const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
-    return storedPoints ? parseInt(storedPoints, 10) : 100; // Default 100 points
+    if (storedPoints === null) {
+      // 如果没有存储点数，初始化为4
+      const defaultPoints = 4;
+      localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, defaultPoints.toString());
+      return defaultPoints;
+    }
+    
+    return parseInt(storedPoints, 10);
   };
 
   return {

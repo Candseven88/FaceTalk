@@ -126,11 +126,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log('User plan exists in Firestore:', data);
             setUserPlan(data);
           } else {
-            // No user plan yet, create default one with 100 points for free users
-            console.log('Creating new user plan with 100 points');
+            // No user plan yet, create default one with 4 points for free users
+            console.log('Creating new user plan with 4 points');
             const defaultPlan: UserPlanData = {
               plan: 'free',
-              pointsLeft: 100, // Free users get 100 points
+              pointsLeft: 4, // Free users get 4 points
               startDate: Timestamp.now(),
               usedPoints: 0,
               lastUpdated: Timestamp.now()
@@ -141,6 +141,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             try {
               await setDoc(userPlanRef, defaultPlan);
               console.log('Default plan saved successfully');
+              
+              // 同时确保本地存储也有相同的积分
+              localStorage.setItem('facetalk_points', '4');
             } catch (setDocError) {
               console.error('Error saving default plan:', setDocError);
             }
@@ -151,13 +154,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.error("Error fetching user plan:", error);
           // Fallback to default user plan if Firestore fails
           console.log('Using fallback user plan');
-          setUserPlan({
-            plan: 'free',
-            pointsLeft: 100,
+          const fallbackPlan = {
+            plan: 'free' as UserPlan,
+            pointsLeft: 4,
             startDate: Timestamp.now(),
             usedPoints: 0,
             lastUpdated: Timestamp.now()
-          });
+          };
+          setUserPlan(fallbackPlan);
+          
+          // 确保本地存储也有积分记录
+          localStorage.setItem('facetalk_points', '4');
         }
         
         setLoading(false);
@@ -177,6 +184,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log("Created new anonymous user:", result.user?.uid);
             if (result.user) {
               localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+              
+              // 确保新创建的匿名用户有默认积分
+              localStorage.setItem('facetalk_points', '4');
             }
           } catch (error) {
             console.error("Error creating new anonymous user:", error);

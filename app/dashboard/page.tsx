@@ -7,9 +7,11 @@ import LoadingState from '../components/LoadingState';
 import { useAuth } from '../../lib/useAuth';
 import { getUserGenerations } from '../../lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
+import DiagnosticTool from '../components/DiagnosticTool';
 
 // 本地存储键名
 const LOCAL_STORAGE_GENERATIONS_KEY = 'facetalk_generations';
+const LOCAL_STORAGE_USERNAME_KEY = 'facetalk_username';
 
 // 生成记录类型
 interface Generation {
@@ -38,14 +40,29 @@ export default function Dashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [isLoadingGenerations, setIsLoadingGenerations] = useState(true);
+  const [username, setUsername] = useState<string>('User');
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // 加载用户名
+  useEffect(() => {
+    // 尝试从localStorage获取用户名
+    const storedUsername = localStorage.getItem(LOCAL_STORAGE_USERNAME_KEY);
+    if (storedUsername) {
+      setUsername(storedUsername);
+    } else {
+      // 没有存储的用户名，生成一个默认用户名
+      const defaultName = user?.isAnonymous ? `Guest ${Math.floor(Math.random() * 1000)}` : 'User';
+      setUsername(defaultName);
+      localStorage.setItem(LOCAL_STORAGE_USERNAME_KEY, defaultName);
+    }
+  }, [user]);
   
   // 创建扩展的用户对象
   const extendedUser: ExtendedUser = {
     uid: user?.uid || '',
-    name: '123', // 默认用户名
-    isAnonymous: true
+    name: username,
+    isAnonymous: user?.isAnonymous || true
   };
   
   // Handle URL params for tab selection
@@ -93,6 +110,7 @@ export default function Dashboard() {
         let firebaseGenerations: Generation[] = [];
         if (user) {
           try {
+            console.log('Fetching generations from Firebase for user:', user.uid);
             const results = await getUserGenerations(user.uid);
             firebaseGenerations = results.map((gen: any) => ({
               ...gen,
@@ -106,6 +124,7 @@ export default function Dashboard() {
         
         // 合并本地和Firebase的生成历史，按时间排序
         let allGenerations = [...localGenerations, ...firebaseGenerations];
+        console.log('Combined generations:', allGenerations.length);
         
         // 去重（可能有重复的记录，优先保留Firebase记录）
         const uniqueIds = new Set();
@@ -139,8 +158,10 @@ export default function Dashboard() {
       }
     };
     
-    loadGenerations();
-  }, [user]);
+    if (!authLoading) {
+      loadGenerations();
+    }
+  }, [user, authLoading]);
   
   // Redirect if not authenticated
   useEffect(() => {
@@ -240,6 +261,11 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-gray-900">Welcome back, {extendedUser.name}!</h1>
             <p className="text-gray-600 mt-2">User ID: {extendedUser.uid}</p>
           </motion.div>
+        </div>
+
+        {/* 添加诊断工具 */}
+        <div className="mb-6">
+          <DiagnosticTool />
         </div>
 
         {/* Dashboard Tabs */}
@@ -581,7 +607,7 @@ export default function Dashboard() {
                         <input 
                           type="text" 
                           id="name" 
-                          defaultValue="123"
+                          defaultValue={extendedUser.name}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-facebook-blue focus:border-facebook-blue"
                         />
                       </div>
