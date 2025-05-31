@@ -201,7 +201,10 @@ export default function VoiceCloning() {
       setProgress('Processing...');
 
       // Poll for prediction results
-      const result = await pollPrediction(data.id, setProgress);
+      const result = await pollPrediction(
+        data.id, 
+        setProgress as React.Dispatch<React.SetStateAction<string>>
+      );
       
       // Handle successful prediction
       if (result.output) {

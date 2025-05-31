@@ -239,7 +239,11 @@ export default function TalkingPortrait() {
       setProgress('Processing started. The Talking Portrait model typically takes 10-15 minutes to complete.');
 
       // Poll for prediction results with the 'talking' model type for longer polling intervals
-      const result = await pollPrediction(data.id, setProgress, 'talking');
+      const result = await pollPrediction(
+        data.id, 
+        setProgress as React.Dispatch<React.SetStateAction<string>>, 
+        'talking'
+      );
       
       // Handle successful prediction
       if (result.output) {

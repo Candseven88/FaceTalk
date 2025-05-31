@@ -254,7 +254,7 @@ export default function LivePortrait() {
       // Poll for prediction results
       const result = await pollPrediction(
         data.id, 
-        (progressText) => {
+        (progressText: string) => {
           setProgress(progressText);
           updateTaskProgress(taskId, progressText);
         }
