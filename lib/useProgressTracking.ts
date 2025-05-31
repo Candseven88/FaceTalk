@@ -100,10 +100,10 @@ export const useProgressTracking = () => {
     setActiveTasks(prev => {
       const updatedTasks = prev.map(task => {
         if (task.id === id) {
-          const updatedTask = {
+          const updatedTask: ProgressTask = {
             ...task,
             progress,
-            status: 'processing',
+            status: 'processing' as const,
             lastUpdated: now
           };
           
@@ -129,9 +129,9 @@ export const useProgressTracking = () => {
     setActiveTasks(prev => {
       const updatedTasks = prev.map(task => {
         if (task.id === id) {
-          const updatedTask = {
+          const updatedTask: ProgressTask = {
             ...task,
-            status: 'completed',
+            status: 'completed' as const,
             progress: 'Completed',
             output,
             lastUpdated: now
@@ -159,9 +159,9 @@ export const useProgressTracking = () => {
     setActiveTasks(prev => {
       const updatedTasks = prev.map(task => {
         if (task.id === id) {
-          const updatedTask = {
+          const updatedTask: ProgressTask = {
             ...task,
-            status: 'failed',
+            status: 'failed' as const,
             progress: 'Failed',
             error,
             lastUpdated: now
