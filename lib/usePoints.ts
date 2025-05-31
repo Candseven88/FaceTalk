@@ -1,6 +1,6 @@
 import { useAuth } from './useAuth';
 import { useState } from 'react';
-import { getFirestore } from './firebase-mock';
+import { doc, updateDoc, db } from './firebase';
 
 // Feature costs mapping
 const FEATURE_COSTS: Record<string, number> = {
@@ -13,7 +13,6 @@ export const usePoints = () => {
   const { user, userPlan, canUseFeature } = useAuth();
   const [isDeducting, setIsDeducting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const db = getFirestore();
 
   /**
    * Deduct points from user account when using a feature
@@ -36,8 +35,20 @@ export const usePoints = () => {
     try {
       setIsDeducting(true);
       
-      // Using mock implementation - simulate success
-      return true;
+      // Actually deduct points in Firebase
+      if (userPlan) {
+        const newPointsLeft = userPlan.pointsLeft - cost;
+        
+        // Update in Firestore
+        await updateDoc(doc(db, 'userPlans', user.uid), {
+          pointsLeft: newPointsLeft
+        });
+        
+        console.log(`Successfully deducted ${cost} points. Remaining: ${newPointsLeft}`);
+        return true;
+      }
+      
+      return false;
     } catch (err) {
       console.error('Error deducting points:', err);
       setError('Failed to deduct points. Please try again.');

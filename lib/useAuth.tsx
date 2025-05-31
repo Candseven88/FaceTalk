@@ -1,35 +1,30 @@
 'use client';
 
 import React, { useEffect, useState, createContext, useContext } from 'react';
-// Import from our mock implementation instead of actual Firebase
+// Import from our real Firebase implementation
 import { 
-  initializeApp, 
-  getAuth, 
+  auth,
+  db,
   onAuthStateChanged, 
   signInAnonymously, 
   User,
-  getFirestore,
   doc, 
   getDoc, 
   setDoc, 
-  onSnapshot,
+  updateDoc,
   Timestamp
-} from './firebase-mock';
+} from './firebase';
 
-// Firebase configuration - keeping for reference but using mock implementation
-const firebaseConfig = {
-  apiKey: "mock-api-key",
-  authDomain: "mock-project-id.firebaseapp.com",
-  projectId: "mock-project-id",
-  storageBucket: "mock-project-id.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
-};
+// Firebase configuration is now in firebase.ts
 
-// Initialize Firebase (using our mock)
-const app = initializeApp();
-const auth = getAuth();
-const db = getFirestore();
+const AuthContext = createContext<AuthContextProps>({
+  user: null,
+  loading: true,
+  userPlan: null,
+  canUseFeature: () => false,
+  updateUserPlan: async () => {},
+  checkAndResetPoints: async () => {},
+});
 
 export type UserPlan = 'free' | 'starter' | 'pro';
 
@@ -47,15 +42,6 @@ interface AuthContextProps {
   updateUserPlan: (uid: string, plan: UserPlan, points: number) => Promise<void>;
   checkAndResetPoints: () => Promise<void>;
 }
-
-const AuthContext = createContext<AuthContextProps>({
-  user: null,
-  loading: true,
-  userPlan: null,
-  canUseFeature: () => false,
-  updateUserPlan: async () => {},
-  checkAndResetPoints: async () => {},
-});
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -90,15 +76,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (currentUser) {
         console.log("User authenticated with UID:", currentUser.uid);
-        // Set default user plan with mock data 
-        setUserPlan({
-          plan: 'free',
-          pointsLeft: 3,
-          startDate: Timestamp.now()
-        });
-        setLoading(false);
         
-        return () => {};
+        // Get user plan from Firestore if exists
+        try {
+          const userPlanDoc = await getDoc(doc(db, 'userPlans', currentUser.uid));
+          
+          if (userPlanDoc.exists()) {
+            // User plan exists, use data from Firestore
+            const data = userPlanDoc.data() as UserPlanData;
+            setUserPlan(data);
+          } else {
+            // No user plan yet, create default one with 3 points for free users
+            const defaultPlan: UserPlanData = {
+              plan: 'free',
+              pointsLeft: 3, // Free users get 3 points
+              startDate: Timestamp.now()
+            };
+            
+            // Save default plan to Firestore
+            await setDoc(doc(db, 'userPlans', currentUser.uid), defaultPlan);
+            setUserPlan(defaultPlan);
+          }
+        } catch (error) {
+          console.error("Error fetching user plan:", error);
+          // Fallback to default user plan if Firestore fails
+          setUserPlan({
+            plan: 'free',
+            pointsLeft: 3,
+            startDate: Timestamp.now()
+          });
+        }
+        
+        setLoading(false);
       } else {
         setUserPlan(null);
         setLoading(false);
@@ -123,12 +132,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    * Update user plan after successful payment
    */
   const updateUserPlan = async (uid: string, plan: UserPlan, points: number): Promise<void> => {
-    // Mock implementation - just update local state
-    setUserPlan({
-      plan,
-      pointsLeft: points,
-      startDate: Timestamp.now()
-    });
+    try {
+      const newPlan: UserPlanData = {
+        plan,
+        pointsLeft: points,
+        startDate: Timestamp.now()
+      };
+      
+      // Update in Firestore
+      await setDoc(doc(db, 'userPlans', uid), newPlan);
+      
+      // Update local state
+      setUserPlan(newPlan);
+    } catch (error) {
+      console.error("Error updating user plan:", error);
+      throw error;
+    }
   };
 
   /**
@@ -144,12 +163,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (daysDifference >= 30) {
       const pointsToReset = userPlan.plan === 'starter' ? 20 : 80;
       
-      // Mock implementation - just update local state
-      setUserPlan({
-        ...userPlan,
-        pointsLeft: pointsToReset,
-        startDate: Timestamp.now()
-      });
+      try {
+        const resetPlan = {
+          ...userPlan,
+          pointsLeft: pointsToReset,
+          startDate: Timestamp.now()
+        };
+        
+        // Update in Firestore
+        await updateDoc(doc(db, 'userPlans', user.uid), resetPlan);
+        
+        // Update local state
+        setUserPlan(resetPlan);
+      } catch (error) {
+        console.error("Error resetting points:", error);
+      }
     }
   };
 
