@@ -3,9 +3,11 @@ import { fileToBase64, validateFileSize, pollPrediction } from '../utils';
 import { PredictionResponse } from '../types';
 import { usePoints } from '../../lib/usePoints';
 import { useAuth } from '../../lib/useAuth';
+import { useProgressTracking } from '../../lib/useProgressTracking';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
 import { saveGeneration, updateUsageStats } from '../../lib/firebase';
+import Link from 'next/link';
 
 // 本地存储键名
 const LOCAL_STORAGE_GENERATION_KEY = 'facetalk_last_generation';
@@ -21,12 +23,22 @@ export default function LivePortrait() {
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSavingResult, setIsSavingResult] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   
   const portraitInputRef = useRef<HTMLInputElement>(null);
   const drivingInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
   const { user } = useAuth();
+  
+  // 使用进度跟踪hook
+  const { 
+    createTask, 
+    updateTaskProgress, 
+    completeTask, 
+    failTask,
+    getTask
+  } = useProgressTracking();
   
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
@@ -37,7 +49,7 @@ export default function LivePortrait() {
     const lastGeneration = localStorage.getItem(LOCAL_STORAGE_GENERATION_KEY);
     if (lastGeneration) {
       try {
-        const { result, timestamp } = JSON.parse(lastGeneration);
+        const { result, timestamp, taskId } = JSON.parse(lastGeneration);
         // 检查是否是最近24小时内的生成结果
         const generationTime = new Date(timestamp).getTime();
         const currentTime = new Date().getTime();
@@ -46,6 +58,16 @@ export default function LivePortrait() {
         if (hoursDiff < 24 && result) {
           console.log('Restoring last generation result from localStorage');
           setVideoResult(result);
+          
+          // 如果有任务ID，尝试加载任务状态
+          if (taskId) {
+            setCurrentTaskId(taskId);
+            const task = getTask(taskId);
+            if (task && (task.status === 'pending' || task.status === 'processing')) {
+              setIsProcessing(true);
+              setProgress(task.progress);
+            }
+          }
         } else {
           // 如果超过24小时，清除本地存储
           localStorage.removeItem(LOCAL_STORAGE_GENERATION_KEY);
@@ -54,7 +76,7 @@ export default function LivePortrait() {
         console.error('Error parsing last generation from localStorage:', error);
       }
     }
-  }, []);
+  }, [getTask]);
 
   // How-to-use steps
   const howToUseSteps = [
@@ -109,11 +131,12 @@ export default function LivePortrait() {
   };
 
   // 保存生成结果到localStorage
-  const saveGenerationToLocalStorage = (result: string) => {
+  const saveGenerationToLocalStorage = (result: string, taskId?: string) => {
     const generationData = {
       result,
       timestamp: new Date().toISOString(),
-      type: 'livePortrait'
+      type: 'livePortrait',
+      taskId
     };
     
     // 保存最后一次生成结果
@@ -193,6 +216,12 @@ export default function LivePortrait() {
       const portraitBase64 = await fileToBase64(portraitFile);
       const drivingBase64 = await fileToBase64(drivingFile);
 
+      // 创建任务记录
+      const inputs = {
+        portraitFilename: portraitFile.name,
+        drivingFilename: drivingFile.name
+      };
+      
       // Initiate prediction
       const response = await fetch('/api/generate-animation', {
         method: 'POST',
@@ -213,9 +242,23 @@ export default function LivePortrait() {
       }
 
       setProgress('Processing...');
+      
+      // 使用任务ID创建任务
+      const taskId = data.id;
+      setCurrentTaskId(taskId);
+      createTask(taskId, 'livePortrait', inputs);
+      
+      // 保存初始状态到localStorage，包含任务ID
+      saveGenerationToLocalStorage('', taskId);
 
       // Poll for prediction results
-      const result = await pollPrediction(data.id, setProgress);
+      const result = await pollPrediction(
+        data.id, 
+        (progressText) => {
+          setProgress(progressText);
+          updateTaskProgress(taskId, progressText);
+        }
+      );
       
       // Handle successful prediction
       if (result.output) {
@@ -224,8 +267,11 @@ export default function LivePortrait() {
           : result.output;
         setVideoResult(outputUrl);
         
+        // 更新任务状态为已完成
+        completeTask(taskId, outputUrl);
+        
         // 保存结果到localStorage
-        saveGenerationToLocalStorage(outputUrl);
+        saveGenerationToLocalStorage(outputUrl, taskId);
         
         // 保存结果到Firestore
         await saveGenerationToFirestore(outputUrl);
@@ -235,6 +281,11 @@ export default function LivePortrait() {
     } catch (err: any) {
       console.error('Animation error:', err);
       setError(err.message || 'Failed to generate animation');
+      
+      // 更新任务状态为失败
+      if (currentTaskId) {
+        failTask(currentTaskId, err.message || 'Failed to generate animation');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -249,6 +300,7 @@ export default function LivePortrait() {
     setVideoResult(null);
     setError(null);
     setProgress('');
+    setCurrentTaskId(null);
     
     if (portraitInputRef.current) portraitInputRef.current.value = '';
     if (drivingInputRef.current) drivingInputRef.current.value = '';
@@ -268,7 +320,7 @@ export default function LivePortrait() {
 
   // 查看历史生成
   const handleViewHistory = () => {
-    router.push('/dashboard');
+    router.push('/tasks');
   };
 
   return (
@@ -370,14 +422,12 @@ export default function LivePortrait() {
           Reset
         </button>
         
-        {videoResult && (
-          <button
-            onClick={handleViewHistory}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            View History
-          </button>
-        )}
+        <Link
+          href="/tasks"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        >
+          View Tasks
+        </Link>
       </div>
 
       {/* Progress Display */}
@@ -386,7 +436,14 @@ export default function LivePortrait() {
           <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
             <div className="h-full bg-blue-600 animate-pulse" style={{ width: isProcessing ? '100%' : '0%' }}></div>
           </div>
-          <p className="text-sm text-gray-600 mt-2">{progress}</p>
+          <div className="flex justify-between items-center mt-2">
+            <p className="text-sm text-gray-600">{progress}</p>
+            {isProcessing && (
+              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">
+                You can check progress later in Tasks
+              </Link>
+            )}
+          </div>
         </div>
       )}
 

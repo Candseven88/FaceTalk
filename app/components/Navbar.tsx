@@ -100,6 +100,16 @@ export default function Navbar() {
               Talking Avatar
             </Link>
             <Link 
+              href="/tasks" 
+              className={`px-3 py-2 rounded-lg transition-all duration-200 ${
+                isActive('/tasks') 
+                  ? 'text-facebook-blue font-medium bg-blue-50' 
+                  : 'text-gray-600 hover:text-facebook-blue hover:bg-gray-50'
+              }`}
+            >
+              Tasks
+            </Link>
+            <Link 
               href="/pricing" 
               className={`px-3 py-2 rounded-lg transition-all duration-200 ${
                 isActive('/pricing') 
@@ -159,6 +169,13 @@ export default function Navbar() {
                       onClick={() => setUserMenuOpen(false)}
                     >
                       Dashboard
+                    </Link>
+                    <Link 
+                      href="/tasks" 
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      Your Tasks
                     </Link>
                     <Link 
                       href="/dashboard?tab=settings" 
@@ -242,6 +259,13 @@ export default function Navbar() {
             onClick={() => setMobileMenuOpen(false)}
           >
             Talking Avatar
+          </Link>
+          <Link 
+            href="/tasks" 
+            className={`block px-3 py-2 rounded-lg ${isActive('/tasks') ? 'bg-blue-50 text-facebook-blue' : 'text-gray-700'}`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Tasks
           </Link>
           <Link 
             href="/pricing" 

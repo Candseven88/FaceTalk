@@ -69,7 +69,7 @@ export const getPollingInterval = (modelType: 'portrait' | 'voice' | 'talking' =
  */
 export const pollPrediction = async (
   id: string, 
-  onProgress?: (status: string) => void,
+  onProgress: ((status: string) => void) | React.Dispatch<React.SetStateAction<string>> = () => {},
   modelType: 'portrait' | 'voice' | 'talking' = 'portrait',
   maxAttempts: number = 180 // Default to 180 attempts (30 minutes for talking portrait)
 ): Promise<PredictionResponse> => {
@@ -77,11 +77,67 @@ export const pollPrediction = async (
   let attempts = 0;
   const startTime = performance.now();
   
+  // 检查浏览器是否支持后台同步（Background Sync API）
+  const hasBackgroundSync = 'SyncManager' in window;
+  
+  // 保存上次任务状态用于恢复
+  const storeCheckpoint = (status: string, prediction: PredictionResponse) => {
+    try {
+      localStorage.setItem(`prediction_status_${id}`, JSON.stringify({
+        status,
+        prediction,
+        lastChecked: new Date().toISOString(),
+        attempts,
+        startTime
+      }));
+    } catch (e) {
+      console.warn('Failed to store prediction checkpoint:', e);
+    }
+  };
+  
+  // 尝试恢复上一次的检查点
+  const tryRestoreCheckpoint = (): { attempts: number, startTime: number } | null => {
+    try {
+      const checkpointData = localStorage.getItem(`prediction_status_${id}`);
+      if (checkpointData) {
+        const checkpoint = JSON.parse(checkpointData);
+        return {
+          attempts: checkpoint.attempts || 0,
+          startTime: checkpoint.startTime || performance.now()
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to restore prediction checkpoint:', e);
+    }
+    return null;
+  };
+  
+  // 尝试恢复上一次的检查点
+  const checkpoint = tryRestoreCheckpoint();
+  if (checkpoint) {
+    attempts = checkpoint.attempts;
+    // 不恢复startTime，总是用当前时间重新计算，以避免过长的等待时间估计
+  }
+  
+  // 如果支持后台同步API，注册一个同步任务
+  // 由于TypeScript类型问题，暂时禁用后台同步功能
+  /*
+  if (hasBackgroundSync && 'serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register(`prediction-${id}`);
+      console.log('Registered background sync for prediction:', id);
+    } catch (e) {
+      console.warn('Failed to register background sync:', e);
+    }
+  }
+  */
+  
   const poll = async (): Promise<PredictionResponse> => {
     attempts++;
     
     if (attempts > maxAttempts) {
-      throw new Error(`Polling timed out after ${maxAttempts} attempts. Your prediction may still be processing. Check the Replicate dashboard for status.`);
+      throw new Error(`Polling timed out after ${maxAttempts} attempts. Your prediction may still be processing. Check the Tasks page later.`);
     }
     
     try {
@@ -90,7 +146,8 @@ export const pollPrediction = async (
       if (!response.ok) {
         // If server error, wait and retry rather than failing immediately
         if (response.status >= 500 && response.status < 600) {
-          onProgress?.(`Server error (${response.status}). Retrying...`);
+          const statusText = `Server error (${response.status}). Retrying...`;
+          onProgress(statusText);
           await new Promise(resolve => setTimeout(resolve, getPollingInterval(modelType)));
           return poll();
         }
@@ -100,11 +157,20 @@ export const pollPrediction = async (
       
       const prediction: PredictionResponse = await response.json();
       
+      // 保存检查点
+      storeCheckpoint(prediction.status, prediction);
+      
       if (prediction.status === 'succeeded') {
+        // 清除检查点数据
+        localStorage.removeItem(`prediction_status_${id}`);
         return prediction;
       } else if (prediction.status === 'failed') {
+        // 清除检查点数据
+        localStorage.removeItem(`prediction_status_${id}`);
         throw new Error(prediction.error || 'Processing failed');
       } else if (prediction.status === 'canceled') {
+        // 清除检查点数据
+        localStorage.removeItem(`prediction_status_${id}`);
         throw new Error('Processing was canceled');
       }
       
@@ -113,12 +179,16 @@ export const pollPrediction = async (
       const elapsedMinutes = Math.floor(elapsedSeconds / 60);
       const remainingSeconds = elapsedSeconds % 60;
       
+      let statusText = '';
+      
       // For talking portrait, provide time estimates
       if (modelType === 'talking') {
-        onProgress?.(`Processing (${prediction.status})... Elapsed: ${elapsedMinutes}m ${remainingSeconds}s. This may take 10-15 minutes.`);
+        statusText = `Processing (${prediction.status})... Elapsed: ${elapsedMinutes}m ${remainingSeconds}s. This may take 10-15 minutes.`;
       } else {
-        onProgress?.(`Processing (${prediction.status})... Elapsed: ${elapsedMinutes}m ${remainingSeconds}s`);
+        statusText = `Processing (${prediction.status})... Elapsed: ${elapsedMinutes}m ${remainingSeconds}s`;
       }
+      
+      onProgress(statusText);
       
       // Wait before polling again
       await new Promise(resolve => setTimeout(resolve, getPollingInterval(modelType)));
@@ -130,7 +200,8 @@ export const pollPrediction = async (
           error.message.includes('connection') || 
           error.message.includes('timeout')
       )) {
-        onProgress?.(`Network error: ${error.message}. Retrying...`);
+        const statusText = `Network error: ${error.message}. Retrying...`;
+        onProgress(statusText);
         await new Promise(resolve => setTimeout(resolve, getPollingInterval(modelType) * 2));
         return poll();
       }
