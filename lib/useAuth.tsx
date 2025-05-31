@@ -126,11 +126,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log('User plan exists in Firestore:', data);
             setUserPlan(data);
           } else {
-            // No user plan yet, create default one with 3 points for free users
-            console.log('Creating new user plan with 3 points');
+            // No user plan yet, create default one with 100 points for free users
+            console.log('Creating new user plan with 100 points');
             const defaultPlan: UserPlanData = {
               plan: 'free',
-              pointsLeft: 3, // Free users get 3 points
+              pointsLeft: 100, // Free users get 100 points
               startDate: Timestamp.now(),
               usedPoints: 0,
               lastUpdated: Timestamp.now()
@@ -153,7 +153,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.log('Using fallback user plan');
           setUserPlan({
             plan: 'free',
-            pointsLeft: 3,
+            pointsLeft: 100,
             startDate: Timestamp.now(),
             usedPoints: 0,
             lastUpdated: Timestamp.now()

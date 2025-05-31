@@ -37,9 +37,9 @@ export const usePoints = () => {
         setLocalPointsLeft(points);
       } else {
         // 没有localStorage数据，设置默认值
-        console.log('No points in localStorage, using default 3');
-        setLocalPointsLeft(3);
-        localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, '3');
+        console.log('No points in localStorage, using default 100');
+        setLocalPointsLeft(100);
+        localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, '100');
       }
     }
   }, [userPlan]);
@@ -113,7 +113,7 @@ export const usePoints = () => {
     try {
       // Get current points from localStorage
       const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
-      let pointsLeft = storedPoints ? parseInt(storedPoints, 10) : 3; // Default 3 points for anonymous users
+      let pointsLeft = storedPoints ? parseInt(storedPoints, 10) : 100; // Default 100 points for anonymous users
       
       // If no points left, return false
       if (pointsLeft < cost) {
@@ -156,7 +156,7 @@ export const usePoints = () => {
     
     // Otherwise use localStorage
     const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
-    return storedPoints ? parseInt(storedPoints, 10) : 3; // Default 3 points
+    return storedPoints ? parseInt(storedPoints, 10) : 100; // Default 100 points
   };
 
   return {
