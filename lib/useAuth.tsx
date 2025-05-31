@@ -197,6 +197,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    */
   const canUseFeature = (feature: string): boolean => {
     console.log(`Checking if can use feature: ${feature}, userPlan:`, userPlan);
+    
+    // 在开发环境中，总是允许使用功能
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Development environment detected, allowing feature use');
+      return true;
+    }
+    
     if (!userPlan) return false;
     
     const cost = FEATURE_COSTS[feature as keyof typeof FEATURE_COSTS] || 0;
