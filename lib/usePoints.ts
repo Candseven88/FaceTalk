@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { doc, updateDoc, Timestamp, db } from './firebase';
 
@@ -15,6 +15,34 @@ export const usePoints = () => {
   const { user, userPlan, canUseFeature } = useAuth();
   const [isDeducting, setIsDeducting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localPointsLeft, setLocalPointsLeft] = useState<number | null>(null);
+
+  console.log('usePoints hook initialized, userPlan:', userPlan);
+
+  // 从localStorage初始化或使用userPlan更新本地点数
+  useEffect(() => {
+    if (userPlan) {
+      // 如果有userPlan，使用它的点数
+      console.log('Setting local points from userPlan:', userPlan.pointsLeft);
+      setLocalPointsLeft(userPlan.pointsLeft);
+      
+      // 同时更新localStorage
+      localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, userPlan.pointsLeft.toString());
+    } else {
+      // 尝试从localStorage获取
+      const storedPoints = localStorage.getItem(LOCAL_STORAGE_POINTS_KEY);
+      if (storedPoints !== null) {
+        const points = parseInt(storedPoints, 10);
+        console.log('Retrieved points from localStorage:', points);
+        setLocalPointsLeft(points);
+      } else {
+        // 没有localStorage数据，设置默认值
+        console.log('No points in localStorage, using default 3');
+        setLocalPointsLeft(3);
+        localStorage.setItem(LOCAL_STORAGE_POINTS_KEY, '3');
+      }
+    }
+  }, [userPlan]);
 
   // Feature costs
   const FEATURE_COSTS = {
