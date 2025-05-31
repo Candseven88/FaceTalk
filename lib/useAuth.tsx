@@ -45,6 +45,9 @@ interface AuthContextProps {
 
 export const useAuth = () => useContext(AuthContext);
 
+// 本地存储的键名
+const LOCAL_STORAGE_UID_KEY = 'facetalk_user_uid';
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,15 +66,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log('AuthProvider useEffect running');
     // Create an anonymous user if not logged in
     const initializeAuth = async () => {
-      console.log('initializeAuth called, auth.currentUser:', auth.currentUser ? 'exists' : 'null');
       try {
-        // Create anonymous user if not already logged in
-        if (!auth.currentUser) {
-          console.log('No current user, signing in anonymously');
+        // 检查localStorage中是否存在存储的用户ID
+        const storedUid = localStorage.getItem(LOCAL_STORAGE_UID_KEY);
+        console.log('Stored UID from localStorage:', storedUid);
+
+        if (auth.currentUser) {
+          console.log('Current user exists:', auth.currentUser.uid);
+          // 确保存储当前用户的UID
+          localStorage.setItem(LOCAL_STORAGE_UID_KEY, auth.currentUser.uid);
+        } else if (storedUid) {
+          console.log('No current user but found stored UID:', storedUid);
+          // 我们有存储的UID但没有当前用户，这可能是因为页面刷新
+          // Firebase会自动使用匿名认证，所以不需要主动做任何事情
+          // 我们只需要等待onAuthStateChanged回调被触发
+        } else {
+          console.log('No current user and no stored UID, signing in anonymously');
+          // 创建新的匿名用户
           const result = await signInAnonymously();
           console.log("Anonymous user created successfully", result.user?.uid);
-        } else {
-          console.log('Current user exists:', auth.currentUser.uid);
+          
+          // 存储用户ID到localStorage
+          if (result.user) {
+            localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+            console.log("User ID saved to localStorage:", result.user.uid);
+          }
         }
       } catch (error) {
         console.error("Error during anonymous authentication:", error);
@@ -80,10 +99,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser: User | null) => {
       console.log('Auth state changed, user:', currentUser ? currentUser.uid : 'null');
-      setUser(currentUser);
       
       if (currentUser) {
         console.log("User authenticated with UID:", currentUser.uid);
+        
+        // 确保UID保存到localStorage，用于跨会话持久化
+        localStorage.setItem(LOCAL_STORAGE_UID_KEY, currentUser.uid);
+        console.log("User ID saved/updated in localStorage");
+        
+        setUser(currentUser);
         
         // Get user plan from Firestore if exists
         try {
@@ -135,6 +159,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.log('No authenticated user');
         setUserPlan(null);
         setLoading(false);
+        
+        // 如果没有认证用户但localStorage中有UID，尝试使用该UID进行认证
+        const storedUid = localStorage.getItem(LOCAL_STORAGE_UID_KEY);
+        if (storedUid) {
+          console.log('No authenticated user but found stored UID. Will try to sign in.');
+          // 由于我们使用的是匿名认证，无法直接使用UID重新认证
+          // 最好的方法是创建一个新的匿名用户
+          try {
+            const result = await signInAnonymously();
+            console.log("Created new anonymous user:", result.user?.uid);
+            if (result.user) {
+              localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+            }
+          } catch (error) {
+            console.error("Error creating new anonymous user:", error);
+          }
+        }
       }
     });
 
