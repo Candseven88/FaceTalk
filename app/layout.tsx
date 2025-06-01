@@ -1,7 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { AuthProvider } from '../lib/useAuth';
+import { AuthProvider } from '../lib/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BackgroundAnimation from './components/BackgroundAnimation';
