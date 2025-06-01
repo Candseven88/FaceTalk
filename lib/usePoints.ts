@@ -53,12 +53,55 @@ export const usePoints = () => {
   };
 
   /**
+   * Check if a feature is available for the current user plan
+   */
+  const isFeatureAvailable = (feature: string): boolean => {
+    // 如果是付费用户，所有功能都可用
+    if (user && userPlan && (userPlan.plan === 'starter' || userPlan.plan === 'pro')) {
+      return true;
+    }
+    
+    // 对于免费用户，限制可用功能
+    if (user && userPlan && userPlan.plan === 'free') {
+      // 免费用户只能使用Live Portrait和Voice Clone
+      if (feature === 'talkingPortrait') {
+        return false;
+      }
+      
+      // 检查积分是否足够
+      const cost = getFeatureCost(feature);
+      return userPlan.pointsLeft >= cost;
+    }
+    
+    // 匿名用户同样有限制
+    if (feature === 'talkingPortrait') {
+      return false;
+    }
+    
+    // 检查本地积分
+    const currentPoints = getRemainingPoints();
+    const cost = getFeatureCost(feature);
+    return currentPoints >= cost;
+  };
+
+  /**
    * Deduct points for using a feature
    */
   const deductPoints = async (feature: string): Promise<boolean> => {
     console.log(`Attempting to deduct points for feature: ${feature}`);
     setIsDeducting(true);
     setError(null);
+    
+    // 首先检查功能是否可用
+    if (!isFeatureAvailable(feature)) {
+      if (feature === 'talkingPortrait') {
+        setError('This feature is not available for free users. Please upgrade your plan.');
+      } else {
+        setError('Not enough points to use this feature');
+      }
+      setIsDeducting(false);
+      return false;
+    }
     
     try {
       // Get feature cost
@@ -176,6 +219,7 @@ export const usePoints = () => {
     isDeducting,
     error,
     getFeatureCost,
-    getRemainingPoints
+    getRemainingPoints,
+    isFeatureAvailable
   };
 }; 

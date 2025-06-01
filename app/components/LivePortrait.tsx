@@ -29,7 +29,7 @@ export default function LivePortrait() {
   const drivingInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userPlan } = useAuth();
   
   // 使用进度跟踪hook
   const { 
@@ -192,6 +192,22 @@ export default function LivePortrait() {
       return;
     }
 
+    // 检查是否是免费用户尝试使用功能
+    if (user && userPlan && userPlan.plan === 'free') {
+      const currentPoints = userPlan.pointsLeft;
+      // 免费用户只有4个积分，只能使用Live Portrait和Voice Clone
+      if (currentPoints < 2) {
+        setError('Free users have limited usage. Please upgrade your plan for more features.');
+        
+        // Redirect to pricing page if not enough points
+        setTimeout(() => {
+          router.push('/pricing');
+        }, 3000);
+        
+        return;
+      }
+    }
+    
     // Check if user has enough points
     const hasEnoughPoints = await deductPoints('livePortrait');
     

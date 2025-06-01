@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/useAuth';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
 import { saveGeneration, updateUsageStats } from '../../lib/firebase';
+import Link from 'next/link';
 
 // 本地存储键名
 const LOCAL_STORAGE_TALKING_GENERATION_KEY = 'facetalk_last_talking_generation';
@@ -31,7 +32,7 @@ export default function TalkingPortrait() {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userPlan } = useAuth();
   
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
@@ -60,6 +61,13 @@ export default function TalkingPortrait() {
       }
     }
   }, []);
+
+  // 检查是否是免费用户
+  useEffect(() => {
+    if (user && userPlan && userPlan.plan === 'free') {
+      setError('This feature is not available for free users. Please upgrade your plan to access Talking Portrait.');
+    }
+  }, [user, userPlan]);
 
   // How-to-use steps
   const howToUseSteps = [
@@ -180,6 +188,12 @@ export default function TalkingPortrait() {
 
   // Generate talking portrait
   const handleGenerate = async () => {
+    // 免费用户不能使用此功能
+    if (user && userPlan && userPlan.plan === 'free') {
+      router.push('/pricing');
+      return;
+    }
+    
     if (!portraitFile || !audioFile) {
       setError('Both portrait image and audio file are required');
       return;
@@ -325,11 +339,20 @@ export default function TalkingPortrait() {
       />
       
       {/* Points Cost Info */}
-      <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-md">
-        <p className="text-sm text-blue-800">
-          This feature costs <span className="font-bold">{featureCost} points</span> per use.
-        </p>
-      </div>
+      {error ? (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600 mb-3">{error}</p>
+          <Link href="/pricing" className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+            Upgrade Your Plan
+          </Link>
+        </div>
+      ) : (
+        <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <p className="text-sm text-blue-800">
+            This feature costs <span className="font-bold">{featureCost} points</span> per use.
+          </p>
+        </div>
+      )}
       
       {/* Input Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
