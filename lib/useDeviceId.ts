@@ -1,15 +1,50 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import FingerprintJS from '@fingerprintjs/fingerprintjs';
 
 // 设备ID存储键
 const DEVICE_ID_KEY = 'facetalk_device_id';
 const MACHINE_ID_KEY = 'facetalk_machine_id';
 
 /**
+ * 生成简单的设备指纹，不依赖外部库
+ */
+const generateSimpleFingerprint = async (): Promise<string> => {
+  // 收集浏览器和设备信息
+  const info = {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    platform: navigator.platform,
+    hardwareConcurrency: navigator.hardwareConcurrency || 0,
+    screenWidth: window.screen.width,
+    screenHeight: window.screen.height,
+    screenDepth: window.screen.colorDepth,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    deviceMemory: (navigator as any).deviceMemory || 0,
+    doNotTrack: navigator.doNotTrack,
+    cookieEnabled: navigator.cookieEnabled,
+    localStorage: typeof localStorage !== 'undefined',
+  };
+
+  // 转换为字符串并使用简单哈希
+  const infoStr = JSON.stringify(info);
+  let hash = 0;
+  for (let i = 0; i < infoStr.length; i++) {
+    const char = infoStr.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // 转换为32位整数
+  }
+
+  // 添加时间戳作为随机因子
+  const randomSeed = Date.now().toString(36);
+  
+  // 生成指纹
+  return `FT-${Math.abs(hash).toString(16)}-${randomSeed}`;
+};
+
+/**
  * 获取设备唯一ID的Hook
- * 结合指纹识别和本地存储，提供稳定的设备识别
+ * 使用简单浏览器指纹和本地存储，提供设备识别
  */
 export const useDeviceId = () => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -29,11 +64,7 @@ export const useDeviceId = () => {
         }
 
         // 创建新的设备指纹
-        const fp = await FingerprintJS.load();
-        const result = await fp.get();
-        
-        // 获取浏览器指纹
-        const visitorId = result.visitorId;
+        const visitorId = await generateSimpleFingerprint();
         
         // 收集额外硬件信息增强指纹识别
         const hardwareInfo = {
@@ -93,9 +124,7 @@ export const getDeviceId = async (): Promise<string> => {
 
   // 创建新的设备指纹
   try {
-    const fp = await FingerprintJS.load();
-    const result = await fp.get();
-    const visitorId = result.visitorId;
+    const visitorId = await generateSimpleFingerprint();
     
     // 收集额外硬件信息
     const hardwareInfo = {
