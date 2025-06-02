@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import LivePortrait from './components/LivePortrait';
 import VoiceCloning from './components/VoiceCloning';
 import TalkingPortrait from './components/TalkingPortrait';
@@ -11,10 +12,17 @@ import EnvChecker from './components/EnvChecker';
 export default function Home() {
   const [activeTab, setActiveTab] = useState('livePortrait');
   const [isVisible, setIsVisible] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setIsVisible(true);
-  }, []);
+    
+    // Get tab parameter from URL if it exists
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['livePortrait', 'voiceCloning', 'talkingPortrait'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   const testimonials = [
     {

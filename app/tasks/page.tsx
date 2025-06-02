@@ -17,19 +17,19 @@ export default function TasksPage() {
         
         <div className="mb-8 flex justify-center space-x-4">
           <Link 
-            href="/live-portrait" 
+            href="/?tab=livePortrait" 
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Live Portrait
           </Link>
           <Link 
-            href="/voice-clone" 
+            href="/?tab=voiceCloning" 
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Voice Clone
           </Link>
           <Link 
-            href="/talking-portrait" 
+            href="/?tab=talkingPortrait" 
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Talking Portrait

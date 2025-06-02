@@ -3,6 +3,7 @@ import { fileToBase64, validateFileSize, pollPrediction } from '../utils';
 import { PredictionResponse } from '../types';
 import { usePoints } from '../../lib/usePoints';
 import { useAuth } from '../../lib/useAuth';
+import { useProgressTracking } from '../../lib/useProgressTracking';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
 import { saveGeneration, updateUsageStats } from '../../lib/firebase';
@@ -22,6 +23,7 @@ export default function VoiceCloning() {
   const [audioResult, setAudioResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSavingResult, setIsSavingResult] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   
   const voiceSampleInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -31,6 +33,15 @@ export default function VoiceCloning() {
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
   const featureCost = getFeatureCost('voiceCloning');
+  
+  // 使用进度跟踪hook
+  const { 
+    createTask, 
+    updateTaskProgress, 
+    completeTask, 
+    failTask,
+    getTask
+  } = useProgressTracking();
 
   // 从本地存储恢复上次生成的结果
   useEffect(() => {
@@ -172,6 +183,13 @@ export default function VoiceCloning() {
     setProgress('Initializing...');
     setError(null);
     setAudioResult(null);
+    
+    // Create a task ID
+    const taskId = `voice_${Date.now()}`;
+    setCurrentTaskId(taskId);
+    
+    // Create a task in the tracking system
+    createTask(taskId, 'voiceCloning', { text, promptText, chunkLength });
 
     try {
       // Convert files to base64
@@ -199,11 +217,16 @@ export default function VoiceCloning() {
       }
 
       setProgress('Processing...');
+      updateTaskProgress(taskId, 'Processing voice clone...');
 
       // Poll for prediction results
       const result = await pollPrediction(
         data.id, 
-        setProgress as React.Dispatch<React.SetStateAction<string>>
+        (progressStatus: string) => {
+          setProgress(progressStatus);
+          updateTaskProgress(taskId, progressStatus);
+        },
+        'voice'
       );
       
       // Handle successful prediction
@@ -218,12 +241,20 @@ export default function VoiceCloning() {
         
         // 保存结果到Firestore
         await saveGenerationToFirestore(outputUrl);
+        
+        // Complete the task in the tracking system
+        completeTask(taskId, outputUrl);
       } else {
         throw new Error('No output generated');
       }
     } catch (err: any) {
       console.error('Voice cloning error:', err);
       setError(err.message || 'Failed to generate voice clone');
+      
+      // Fail the task in the tracking system
+      if (currentTaskId) {
+        failTask(currentTaskId, err.message || 'Failed to generate voice clone');
+      }
     } finally {
       setIsProcessing(false);
     }

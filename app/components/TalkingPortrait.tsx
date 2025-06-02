@@ -3,6 +3,7 @@ import { fileToBase64, validateFileSize, pollPrediction } from '../utils';
 import { PredictionResponse } from '../types';
 import { usePoints } from '../../lib/usePoints';
 import { useAuth } from '../../lib/useAuth';
+import { useProgressTracking } from '../../lib/useProgressTracking';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
 import { saveGeneration, updateUsageStats } from '../../lib/firebase';
@@ -27,6 +28,7 @@ export default function TalkingPortrait() {
   const [videoResult, setVideoResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSavingResult, setIsSavingResult] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   
   const portraitInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +39,15 @@ export default function TalkingPortrait() {
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
   const featureCost = getFeatureCost('talkingPortrait');
+  
+  // 使用进度跟踪hook
+  const { 
+    createTask, 
+    updateTaskProgress, 
+    completeTask, 
+    failTask,
+    getTask
+  } = useProgressTracking();
 
   // 从本地存储恢复上次生成的结果
   useEffect(() => {
@@ -217,6 +228,19 @@ export default function TalkingPortrait() {
     setProgress('Initializing...');
     setError(null);
     setVideoResult(null);
+    
+    // Create a task ID
+    const taskId = `talking_${Date.now()}`;
+    setCurrentTaskId(taskId);
+    
+    // Create a task in the tracking system
+    createTask(taskId, 'talkingPortrait', { 
+      seed, 
+      dynamicScale, 
+      minResolution, 
+      inferenceSteps, 
+      keepResolution 
+    });
 
     try {
       // Convert files to base64
@@ -225,6 +249,7 @@ export default function TalkingPortrait() {
 
       // Show initial processing message
       setProgress('Starting prediction... This may take 10-15 minutes to complete.');
+      updateTaskProgress(taskId, 'Starting prediction... This may take 10-15 minutes to complete.');
 
       // Initiate prediction
       const response = await fetch('/api/talking-portrait', {
@@ -251,11 +276,15 @@ export default function TalkingPortrait() {
       }
 
       setProgress('Processing started. The Talking Portrait model typically takes 10-15 minutes to complete.');
+      updateTaskProgress(taskId, 'Processing started. The Talking Portrait model typically takes 10-15 minutes to complete.');
 
       // Poll for prediction results with the 'talking' model type for longer polling intervals
       const result = await pollPrediction(
         data.id, 
-        setProgress as React.Dispatch<React.SetStateAction<string>>, 
+        (progressStatus: string) => {
+          setProgress(progressStatus);
+          updateTaskProgress(taskId, progressStatus);
+        }, 
         'talking'
       );
       
@@ -272,17 +301,19 @@ export default function TalkingPortrait() {
         
         // 保存结果到Firestore
         await saveGenerationToFirestore(outputUrl);
+        
+        // Complete the task in the tracking system
+        completeTask(taskId, outputUrl);
       } else {
         throw new Error('No output generated');
       }
     } catch (err: any) {
       console.error('Talking portrait error:', err);
+      setError(err.message || 'Failed to generate talking portrait');
       
-      // Provide more helpful error messages
-      if (err.message?.includes('timed out')) {
-        setError('Processing is taking longer than expected. Your portrait may still be generating. You can check back later or try again with different settings.');
-      } else {
-        setError(err.message || 'Failed to generate talking portrait');
+      // Fail the task in the tracking system
+      if (currentTaskId) {
+        failTask(currentTaskId, err.message || 'Failed to generate talking portrait');
       }
     } finally {
       setIsProcessing(false);
