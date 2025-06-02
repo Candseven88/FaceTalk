@@ -12,8 +12,12 @@ import {
   getDoc, 
   setDoc, 
   updateDoc,
-  Timestamp
+  Timestamp,
+  checkDeviceCreditsUsage,
+  recordDeviceCreditsUsage
 } from './firebase';
+// Import from useDeviceId
+import { getDeviceId } from './useDeviceId';
 
 // Firebase configuration is now in firebase.ts
 
@@ -126,24 +130,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log('User plan exists in Firestore:', data);
             setUserPlan(data);
           } else {
-            // No user plan yet, create default one with 4 points for free users
-            console.log('Creating new user plan with 4 points');
+            // No user plan yet, create default one with credits based on device usage
+            console.log('Creating new user plan');
+            
+            // 获取设备ID并检查是否已使用过免费积分
+            const deviceId = await getDeviceId();
+            const hasUsedFreeCredits = await checkDeviceCreditsUsage(deviceId);
+            
+            // 确定初始积分 - 如果设备已用过免费积分，只给1点作为示例，否则给4点
+            const initialCredits = hasUsedFreeCredits ? 1 : 4;
+            
             const defaultPlan: UserPlanData = {
               plan: 'free',
-              pointsLeft: 4, // Free users get 4 points
+              pointsLeft: initialCredits,
               startDate: Timestamp.now(),
               usedPoints: 0,
               lastUpdated: Timestamp.now()
             };
             
+            // 如果这是一个新设备并获得了免费积分，记录设备已使用免费积分
+            if (!hasUsedFreeCredits && initialCredits > 1) {
+              await recordDeviceCreditsUsage(deviceId);
+              console.log('Recorded device credits usage for new device');
+            }
+            
             // Save default plan to Firestore
-            console.log('Saving default plan to Firestore');
+            console.log('Saving default plan to Firestore with', initialCredits, 'credits');
             try {
               await setDoc(userPlanRef, defaultPlan);
               console.log('Default plan saved successfully');
               
-              // 同时确保本地存储也有相同的积分
-              localStorage.setItem('facetalk_points', '4');
+              // 确保本地存储也有相同的积分
+              localStorage.setItem('facetalk_points', initialCredits.toString());
             } catch (setDocError) {
               console.error('Error saving default plan:', setDocError);
             }

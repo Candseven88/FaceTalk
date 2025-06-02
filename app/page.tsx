@@ -8,6 +8,8 @@ import LivePortrait from './components/LivePortrait';
 import VoiceCloning from './components/VoiceCloning';
 import TalkingPortrait from './components/TalkingPortrait';
 import EnvChecker from './components/EnvChecker';
+import CreditsInfo from './components/CreditsInfo';
+import FreeCreditsAlert from './components/FreeCreditsAlert';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('livePortrait');
@@ -171,6 +173,10 @@ export default function Home() {
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Choose Your AI Tool</h2>
             <p className="text-lg text-gray-600">Select the perfect generator for your creative needs</p>
           </div>
+          
+          <CreditsInfo />
+
+          <FreeCreditsAlert />
 
           <div className="bg-white rounded-2xl shadow-card p-6 mb-8">
             <div className="flex flex-wrap justify-center mb-8 border-b border-gray-200">

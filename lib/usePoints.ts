@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { doc, updateDoc, Timestamp, db } from './firebase';
+import { getDeviceId } from './useDeviceId';
+import { recordDeviceCreditsUsage } from './firebase';
 
 // Local storage keys
 const LOCAL_STORAGE_POINTS_KEY = 'facetalk_points';
@@ -49,7 +51,7 @@ export const usePoints = () => {
   const FEATURE_COSTS = {
     livePortrait: 2,
     voiceCloning: 1,
-    talkingPortrait: 4,
+    talkingPortrait: 3,
   };
 
   /**
@@ -176,6 +178,16 @@ export const usePoints = () => {
       
       // Track last used timestamp
       localStorage.setItem(LOCAL_STORAGE_LAST_USED_KEY, new Date().toISOString());
+      
+      // 当用户使用功能并从本地扣除积分时，记录设备已使用免费积分
+      try {
+        const deviceId = await getDeviceId();
+        await recordDeviceCreditsUsage(deviceId);
+        console.log('Device credits usage recorded for anonymous user');
+      } catch (deviceError) {
+        console.warn('Error recording device usage:', deviceError);
+        // 继续执行，不影响用户体验
+      }
       
       console.log(`Local points deducted. Remaining: ${pointsLeft}`);
       return true;

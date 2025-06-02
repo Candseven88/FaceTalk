@@ -265,6 +265,56 @@ export const upgradeAnonymousUser = async (email: string, password: string) => {
   }
 };
 
+// 记录设备的免费积分使用情况
+export const recordDeviceCreditsUsage = async (deviceId: string) => {
+  try {
+    const deviceRef = doc(db, 'deviceCredits', deviceId);
+    
+    // 检查设备记录是否存在
+    const deviceDoc = await getDoc(deviceRef);
+    
+    if (deviceDoc.exists()) {
+      // 更新现有记录
+      await updateDoc(deviceRef, {
+        hasUsedFreeCredits: true,
+        lastUpdated: serverTimestamp()
+      });
+    } else {
+      // 创建新记录
+      await setDoc(deviceRef, {
+        deviceId,
+        hasUsedFreeCredits: true,
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+      });
+    }
+    
+    console.log('Device credits usage recorded for device:', deviceId);
+    return true;
+  } catch (error) {
+    console.error('Error recording device credits usage:', error);
+    return false;
+  }
+};
+
+// 检查设备是否已使用过免费积分
+export const checkDeviceCreditsUsage = async (deviceId: string): Promise<boolean> => {
+  try {
+    const deviceRef = doc(db, 'deviceCredits', deviceId);
+    const deviceDoc = await getDoc(deviceRef);
+    
+    if (deviceDoc.exists()) {
+      const deviceData = deviceDoc.data();
+      return deviceData.hasUsedFreeCredits === true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking device credits usage:', error);
+    return false;
+  }
+};
+
 // Export Firebase services with the same interface as the mock
 export { 
   app, 

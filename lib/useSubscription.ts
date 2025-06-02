@@ -12,7 +12,7 @@ interface ExtendedUserPlanData extends UserPlanData {
 }
 
 // 定义订阅计划类型
-export type SubscriptionPlan = 'free' | 'basic' | 'pro';
+export type SubscriptionPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
 // 订阅计划详情
 export const SUBSCRIPTION_PLANS = {
@@ -25,34 +25,69 @@ export const SUBSCRIPTION_PLANS = {
       voiceCloning: true,
       talkingAvatar: false
     },
-    description: 'Try out our basic features with 3 free credits',
+    description: '尝试基本功能，每台设备仅限一次免费额度',
     tag: '🔍 Try Now'
   },
   basic: {
     name: 'Basic',
-    price: 5,
-    credits: 10,
+    price: 9.99,
+    credits: 15,
     features: {
       livePortrait: true,
       voiceCloning: true,
       talkingAvatar: true
     },
-    description: '10 credits per month, all features unlocked',
+    description: '每月15个credits，所有功能解锁',
     tag: '🟢 Best Value',
     paymentLink: 'https://www.creem.io/payment/prod_FDwwEsjdqfy6bQ6MZ4T0p'
   },
   pro: {
     name: 'Pro',
-    price: 15,
-    credits: 40,
+    price: 19.99,
+    credits: 50,
     features: {
       livePortrait: true,
       voiceCloning: true,
       talkingAvatar: true
     },
-    description: '40 credits per month, all features unlocked, priority support',
+    description: '每月50个credits，所有功能解锁，优先支持',
     tag: '🟣 Recommended',
     paymentLink: 'https://www.creem.io/payment/prod_7GcWnmwWJ9vqqO8LirnCCA'
+  },
+  enterprise: {
+    name: 'Enterprise',
+    price: 49.99,
+    credits: 150,
+    features: {
+      livePortrait: true,
+      voiceCloning: true,
+      talkingAvatar: true
+    },
+    description: '每月150个credits，所有功能解锁，专属客户支持',
+    tag: '⭐ Ultimate',
+    paymentLink: 'https://www.creem.io/payment/prod_7GcWnmwWJ9vqqO8LirnCCA'
+  }
+};
+
+// 一次性购买积分包
+export const CREDIT_PACKAGES = {
+  small: {
+    name: '10 Credits',
+    price: 7.99,
+    credits: 10,
+    description: '一次性购买10个credits'
+  },
+  medium: {
+    name: '25 Credits',
+    price: 16.99,
+    credits: 25,
+    description: '一次性购买25个credits，节省15%'
+  },
+  large: {
+    name: '50 Credits',
+    price: 29.99,
+    credits: 50,
+    description: '一次性购买50个credits，节省25%'
   }
 };
 
