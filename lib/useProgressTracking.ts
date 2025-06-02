@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-// 本地存储键名前缀
+// Local storage key prefix
 const PROGRESS_STORAGE_KEY_PREFIX = 'facetalk_progress_';
 const TASK_STORAGE_KEY = 'facetalk_active_tasks';
 
@@ -22,7 +22,7 @@ export const useProgressTracking = () => {
   const [activeTasks, setActiveTasks] = useState<ProgressTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 初始化时从localStorage加载所有活动任务
+  // Load all active tasks from localStorage on initialization
   useEffect(() => {
     const loadTasks = () => {
       try {
@@ -30,7 +30,7 @@ export const useProgressTracking = () => {
         if (tasksJson) {
           const tasks = JSON.parse(tasksJson) as ProgressTask[];
           
-          // 过滤掉24小时前的任务
+          // Filter out tasks older than 24 hours
           const filteredTasks = tasks.filter(task => {
             const lastUpdated = new Date(task.lastUpdated).getTime();
             const now = new Date().getTime();
@@ -40,7 +40,7 @@ export const useProgressTracking = () => {
           
           setActiveTasks(filteredTasks);
           
-          // 如果有过滤掉的任务，更新存储
+          // Update storage if tasks were filtered out
           if (filteredTasks.length !== tasks.length) {
             localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(filteredTasks));
           }
@@ -54,7 +54,7 @@ export const useProgressTracking = () => {
     
     loadTasks();
     
-    // 设置轮询，每5秒检查一次活动任务的进度
+    // Set up polling to check active task progress every 5 seconds
     const intervalId = setInterval(() => {
       loadTasks();
     }, 5000);
@@ -62,7 +62,7 @@ export const useProgressTracking = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // 创建新任务
+  // Create a new task
   const createTask = (
     id: string,
     type: 'livePortrait' | 'voiceCloning' | 'talkingPortrait',
@@ -79,21 +79,21 @@ export const useProgressTracking = () => {
       inputs
     };
     
-    // 更新内存中的活动任务
+    // Update active tasks in memory
     setActiveTasks(prev => {
       const updatedTasks = [...prev, newTask];
-      // 保存到localStorage
+      // Save to localStorage
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(updatedTasks));
       return updatedTasks;
     });
     
-    // 单独保存任务详情，方便快速访问
+    // Save task details separately for quick access
     localStorage.setItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`, JSON.stringify(newTask));
     
     return newTask;
   };
 
-  // 更新任务进度
+  // Update task progress
   const updateTaskProgress = (id: string, progress: string) => {
     const now = new Date().toISOString();
     
@@ -107,7 +107,7 @@ export const useProgressTracking = () => {
             lastUpdated: now
           };
           
-          // 更新单独的任务存储
+          // Update individual task storage
           localStorage.setItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`, JSON.stringify(updatedTask));
           
           return updatedTask;
@@ -115,14 +115,14 @@ export const useProgressTracking = () => {
         return task;
       });
       
-      // 更新任务列表存储
+      // Update task list storage
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(updatedTasks));
       
       return updatedTasks;
     });
   };
 
-  // 完成任务
+  // Complete a task
   const completeTask = (id: string, output: string) => {
     const now = new Date().toISOString();
     
@@ -137,7 +137,7 @@ export const useProgressTracking = () => {
             lastUpdated: now
           };
           
-          // 更新单独的任务存储
+          // Update individual task storage
           localStorage.setItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`, JSON.stringify(updatedTask));
           
           return updatedTask;
@@ -145,14 +145,14 @@ export const useProgressTracking = () => {
         return task;
       });
       
-      // 更新任务列表存储
+      // Update task list storage
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(updatedTasks));
       
       return updatedTasks;
     });
   };
 
-  // 任务失败
+  // Mark a task as failed
   const failTask = (id: string, error: string) => {
     const now = new Date().toISOString();
     
@@ -167,7 +167,7 @@ export const useProgressTracking = () => {
             lastUpdated: now
           };
           
-          // 更新单独的任务存储
+          // Update individual task storage
           localStorage.setItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`, JSON.stringify(updatedTask));
           
           return updatedTask;
@@ -175,14 +175,14 @@ export const useProgressTracking = () => {
         return task;
       });
       
-      // 更新任务列表存储
+      // Update task list storage
       localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(updatedTasks));
       
       return updatedTasks;
     });
   };
 
-  // 获取任务详情
+  // Get task details
   const getTask = (id: string): ProgressTask | null => {
     try {
       const taskJson = localStorage.getItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`);
@@ -195,7 +195,7 @@ export const useProgressTracking = () => {
     return null;
   };
 
-  // 删除任务
+  // Remove a task
   const removeTask = (id: string) => {
     setActiveTasks(prev => {
       const updatedTasks = prev.filter(task => task.id !== id);
@@ -203,21 +203,21 @@ export const useProgressTracking = () => {
       return updatedTasks;
     });
     
-    // 删除单独的任务存储
+    // Delete individual task storage
     localStorage.removeItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`);
   };
 
-  // 获取特定类型的活动任务
+  // Get tasks by type
   const getTasksByType = (type: 'livePortrait' | 'voiceCloning' | 'talkingPortrait') => {
     return activeTasks.filter(task => task.type === type);
   };
 
-  // 获取所有处于进行中状态的任务
+  // Get all tasks that are in progress
   const getProcessingTasks = () => {
     return activeTasks.filter(task => task.status === 'pending' || task.status === 'processing');
   };
 
-  // 获取所有已完成的任务
+  // Get all completed tasks
   const getCompletedTasks = () => {
     return activeTasks.filter(task => task.status === 'completed');
   };

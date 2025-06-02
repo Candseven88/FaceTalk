@@ -17,14 +17,14 @@ export default function DebugPage() {
         console.log('Firebase db object:', db);
         
         if (auth && db) {
-          setFirebaseStatus('Firebase初始化成功');
+          setFirebaseStatus('Firebase initialization successful');
         } else {
-          setFirebaseStatus('Firebase初始化失败');
+          setFirebaseStatus('Firebase initialization failed');
           setErrorMessage('Firebase objects are undefined');
         }
       } catch (error) {
         console.error('Firebase check error:', error);
-        setFirebaseStatus('Firebase检查出错');
+        setFirebaseStatus('Firebase check error');
         setErrorMessage(error instanceof Error ? error.message : String(error));
       }
     };
@@ -56,55 +56,55 @@ export default function DebugPage() {
   
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Firebase调试页面</h1>
+      <h1 className="text-2xl font-bold mb-6">Firebase Debug Page</h1>
       
       <div className="mb-8 p-4 bg-gray-100 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">Firebase状态</h2>
-        <p className="mb-2">状态: <span className={firebaseStatus.includes('成功') ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{firebaseStatus}</span></p>
+        <h2 className="text-xl font-semibold mb-2">Firebase Status</h2>
+        <p className="mb-2">Status: <span className={firebaseStatus.includes('successful') ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{firebaseStatus}</span></p>
         {errorMessage && (
           <div className="p-3 bg-red-100 text-red-800 rounded mt-2">
-            <p>错误: {errorMessage}</p>
+            <p>Error: {errorMessage}</p>
           </div>
         )}
       </div>
       
       <div className="mb-8 p-4 bg-gray-100 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">用户信息</h2>
+        <h2 className="text-xl font-semibold mb-2">User Information</h2>
         {loading ? (
-          <p>加载中...</p>
+          <p>Loading...</p>
         ) : user ? (
           <div>
-            <p className="mb-2">用户ID: <span className="font-mono bg-gray-200 p-1 rounded">{user.uid}</span></p>
-            <p className="mb-2">匿名用户: {user.isAnonymous ? '是' : '否'}</p>
+            <p className="mb-2">User ID: <span className="font-mono bg-gray-200 p-1 rounded">{user.uid}</span></p>
+            <p className="mb-2">Anonymous User: {user.isAnonymous ? 'Yes' : 'No'}</p>
           </div>
         ) : (
-          <p className="text-red-600">未登录</p>
+          <p className="text-red-600">Not logged in</p>
         )}
       </div>
       
       <div className="mb-8 p-4 bg-gray-100 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">用户计划信息</h2>
+        <h2 className="text-xl font-semibold mb-2">User Plan Information</h2>
         {loading ? (
-          <p>加载中...</p>
+          <p>Loading...</p>
         ) : userPlan ? (
           <div>
-            <p className="mb-2">计划类型: <span className="font-semibold">{userPlan.plan}</span></p>
-            <p className="mb-2">剩余点数: <span className="font-semibold">{userPlan.pointsLeft}</span></p>
-            <p className="mb-2">开始时间: <span className="font-semibold">{userPlan.startDate.toDate().toLocaleString()}</span></p>
+            <p className="mb-2">Plan Type: <span className="font-semibold">{userPlan.plan}</span></p>
+            <p className="mb-2">Points Left: <span className="font-semibold">{userPlan.pointsLeft}</span></p>
+            <p className="mb-2">Start Date: <span className="font-semibold">{userPlan.startDate.toDate().toLocaleString()}</span></p>
           </div>
         ) : (
-          <p className="text-red-600">未找到用户计划</p>
+          <p className="text-red-600">User plan not found</p>
         )}
       </div>
       
       <div className="mb-8 p-4 bg-gray-100 rounded-lg">
-        <h2 className="text-xl font-semibold mb-2">环境变量</h2>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_API_KEY: {process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? '已设置' : '未设置'}</p>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: {process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? '已设置' : '未设置'}</p>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_PROJECT_ID: {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? '已设置' : '未设置'}</p>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: {process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? '已设置' : '未设置'}</p>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: {process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? '已设置' : '未设置'}</p>
-        <p className="mb-1">NEXT_PUBLIC_FIREBASE_APP_ID: {process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? '已设置' : '未设置'}</p>
+        <h2 className="text-xl font-semibold mb-2">Environment Variables</h2>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_API_KEY: {process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'Set' : 'Not set'}</p>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: {process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'Set' : 'Not set'}</p>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_PROJECT_ID: {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'Set' : 'Not set'}</p>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: {process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? 'Set' : 'Not set'}</p>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: {process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? 'Set' : 'Not set'}</p>
+        <p className="mb-1">NEXT_PUBLIC_FIREBASE_APP_ID: {process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? 'Set' : 'Not set'}</p>
       </div>
       
       <div className="flex flex-col items-start space-y-4">
@@ -112,14 +112,14 @@ export default function DebugPage() {
           onClick={createNewUser}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
-          创建新用户(清除当前会话)
+          Create New User (Clear Current Session)
         </button>
         
         <button 
           onClick={() => window.location.href = '/'}
           className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
         >
-          返回首页
+          Return to Homepage
         </button>
       </div>
     </div>

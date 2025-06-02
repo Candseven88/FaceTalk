@@ -56,12 +56,12 @@ const firebaseConfig = {
 
 // Add debug logging to check if env vars are loaded
 console.log('Firebase Config Check:', {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? '已设置' : '未设置',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? '已设置' : '未设置',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? '已设置' : '未设置',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? '已设置' : '未设置',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? '已设置' : '未设置',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? '已设置' : '未设置',
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'Set' : 'Not set',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'Set' : 'Not set',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'Set' : 'Not set',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ? 'Set' : 'Not set',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ? 'Set' : 'Not set',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? 'Set' : 'Not set',
 });
 
 // Initialize Firebase
@@ -82,7 +82,7 @@ const functions = getFunctions(app);
 
 console.log('Firebase auth and db setup complete');
 
-// 添加生成记录到Firestore
+// Add generation record to Firestore
 export const saveGeneration = async (userId: string, type: string, result: string, cost: number) => {
   try {
     const generationData = {
@@ -102,7 +102,7 @@ export const saveGeneration = async (userId: string, type: string, result: strin
   }
 };
 
-// 获取用户的生成历史
+// Get user generation history
 export const getUserGenerations = async (userId: string, maxResults = 10) => {
   try {
     const q = query(
@@ -126,7 +126,7 @@ export const getUserGenerations = async (userId: string, maxResults = 10) => {
   }
 };
 
-// 更新用户计划的使用情况
+// Update user plan usage stats
 export const updateUsageStats = async (userId: string, pointsUsed: number) => {
   try {
     const userPlanRef = doc(db, 'userPlans', userId);
@@ -155,7 +155,7 @@ export const updateUsageStats = async (userId: string, pointsUsed: number) => {
   }
 };
 
-// 保存用户反馈
+// Save user feedback
 export const saveUserFeedback = async (userId: string, feedback: any) => {
   try {
     const feedbackData = {
@@ -174,10 +174,10 @@ export const saveUserFeedback = async (userId: string, feedback: any) => {
   }
 };
 
-// 处理用户订阅
+// Process user subscription
 export const processSubscription = async (userId: string, plan: string) => {
   try {
-    // 确定积分和等级
+    // Determine credits and level
     let credits = 0;
     switch (plan) {
       case 'basic':
@@ -190,14 +190,14 @@ export const processSubscription = async (userId: string, plan: string) => {
         throw new Error('Invalid plan');
     }
     
-    // 更新用户文档
+    // Update user document
     const userRef = doc(db, 'userPlans', userId);
     
     await runTransaction(db, async (transaction) => {
-      // 获取当前用户数据
+      // Get current user data
       const userDoc = await transaction.get(userRef);
       
-      // 准备更新数据
+      // Prepare update data
       const userData = {
         plan,
         pointsLeft: credits,
@@ -212,7 +212,7 @@ export const processSubscription = async (userId: string, plan: string) => {
         lastUpdated: serverTimestamp()
       };
       
-      // 如果用户文档已存在，保留现有字段
+      // If user document exists, preserve existing fields
       if (userDoc.exists()) {
         transaction.update(userRef, userData);
       } else {
@@ -223,14 +223,14 @@ export const processSubscription = async (userId: string, plan: string) => {
         });
       }
       
-      // 记录交易
+      // Record transaction
       const transactionRef = doc(collection(db, 'transactions'));
       transaction.set(transactionRef, {
         userId,
         type: 'subscription',
         plan,
         credits,
-        amount: plan === 'basic' ? 5 : 15,
+        amount: plan === 'basic' ? 5.00 : 15.00,
         timestamp: serverTimestamp(),
         status: 'completed'
       });
@@ -244,7 +244,7 @@ export const processSubscription = async (userId: string, plan: string) => {
   }
 };
 
-// 升级匿名用户为正式账户
+// Upgrade anonymous user to regular account
 export const upgradeAnonymousUser = async (email: string, password: string) => {
   if (!auth.currentUser) {
     throw new Error('No current user');
@@ -265,22 +265,22 @@ export const upgradeAnonymousUser = async (email: string, password: string) => {
   }
 };
 
-// 记录设备的免费积分使用情况
+// Record device free credits usage
 export const recordDeviceCreditsUsage = async (deviceId: string) => {
   try {
     const deviceRef = doc(db, 'deviceCredits', deviceId);
     
-    // 检查设备记录是否存在
+    // Check if device record exists
     const deviceDoc = await getDoc(deviceRef);
     
     if (deviceDoc.exists()) {
-      // 更新现有记录
+      // Update existing record
       await updateDoc(deviceRef, {
         hasUsedFreeCredits: true,
         lastUpdated: serverTimestamp()
       });
     } else {
-      // 创建新记录
+      // Create new record
       await setDoc(deviceRef, {
         deviceId,
         hasUsedFreeCredits: true,
@@ -297,7 +297,7 @@ export const recordDeviceCreditsUsage = async (deviceId: string) => {
   }
 };
 
-// 检查设备是否已使用过免费积分
+// Check if device has already used free credits
 export const checkDeviceCreditsUsage = async (deviceId: string): Promise<boolean> => {
   try {
     const deviceRef = doc(db, 'deviceCredits', deviceId);

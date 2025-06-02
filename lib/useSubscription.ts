@@ -25,34 +25,34 @@ export const SUBSCRIPTION_PLANS = {
       voiceCloning: true,
       talkingAvatar: false
     },
-    description: '尝试基本功能，每台设备仅限一次免费额度',
+    description: 'Try basic features, limited to one free trial per device',
     tag: '🔍 Try Now'
   },
   basic: {
-    name: 'Basic',
-    price: 9.99,
-    credits: 15,
+    name: 'Starter',
+    price: 5.00,
+    credits: 10,
     features: {
       livePortrait: true,
       voiceCloning: true,
       talkingAvatar: true
     },
-    description: '每月15个credits，所有功能解锁',
+    description: '10 credits per month, all features unlocked',
     tag: '🟢 Best Value',
-    paymentLink: 'https://www.creem.io/payment/prod_FDwwEsjdqfy6bQ6MZ4T0p'
+    paymentLink: 'https://www.creem.io/payment/prod_3KM6KH3RcSxoqPMgFIIVtN'
   },
   pro: {
     name: 'Pro',
-    price: 19.99,
-    credits: 50,
+    price: 15.00,
+    credits: 40,
     features: {
       livePortrait: true,
       voiceCloning: true,
       talkingAvatar: true
     },
-    description: '每月50个credits，所有功能解锁，优先支持',
+    description: '40 credits per month, all features unlocked, priority support',
     tag: '🟣 Recommended',
-    paymentLink: 'https://www.creem.io/payment/prod_7GcWnmwWJ9vqqO8LirnCCA'
+    paymentLink: 'https://www.creem.io/payment/prod_2SWWhM45WDvaUgJzmqnV8e'
   },
   enterprise: {
     name: 'Enterprise',
@@ -63,7 +63,7 @@ export const SUBSCRIPTION_PLANS = {
       voiceCloning: true,
       talkingAvatar: true
     },
-    description: '每月150个credits，所有功能解锁，专属客户支持',
+    description: '150 credits per month, all features unlocked, dedicated support',
     tag: '⭐ Ultimate',
     paymentLink: 'https://www.creem.io/payment/prod_7GcWnmwWJ9vqqO8LirnCCA'
   }
@@ -75,19 +75,19 @@ export const CREDIT_PACKAGES = {
     name: '10 Credits',
     price: 7.99,
     credits: 10,
-    description: '一次性购买10个credits'
+    description: 'One-time purchase of 10 credits'
   },
   medium: {
     name: '25 Credits',
     price: 16.99,
     credits: 25,
-    description: '一次性购买25个credits，节省15%'
+    description: 'One-time purchase of 25 credits, save 15%'
   },
   large: {
     name: '50 Credits',
     price: 29.99,
     credits: 50,
-    description: '一次性购买50个credits，节省25%'
+    description: 'One-time purchase of 50 credits, save 25%'
   }
 };
 

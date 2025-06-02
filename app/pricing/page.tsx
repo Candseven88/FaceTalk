@@ -24,31 +24,31 @@ export default function PricingPage() {
   const currentPlan = getCurrentPlan();
   const isSubscribed = hasActiveSubscription();
   
-  // 处理订阅按钮点击
+  // Handle subscription button click
   const handleSubscribeClick = (plan: 'basic' | 'pro') => {
     setSelectedPlan(plan);
     
-    // 如果用户未登录，显示登录/注册模态框
+    // If user is not logged in, show login/register modal
     if (!user) {
       setShowAuthModal(true);
       return;
     }
     
-    // 否则直接重定向到支付页面
+    // Otherwise redirect to payment page
     window.location.href = getPaymentLink(plan);
   };
   
-  // 用户认证成功的回调
+  // Auth success callback
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
     
-    // 认证成功后，如果有选择的计划，重定向到相应的支付页面
+    // After successful auth, redirect to payment page if plan was selected
     if (selectedPlan) {
       window.location.href = getPaymentLink(selectedPlan);
     }
   };
   
-  // 渲染计划卡片
+  // Render plan card
   const renderPlanCard = (planKey: 'free' | 'basic' | 'pro') => {
     const plan = SUBSCRIPTION_PLANS[planKey];
     const isCurrentPlan = currentPlan === planKey;
@@ -58,18 +58,18 @@ export default function PricingPage() {
       <div className={`bg-white rounded-lg shadow-md overflow-hidden border ${
         isCurrentPlan ? 'border-blue-500' : 'border-gray-200'
       }`}>
-        {/* 计划标签 */}
+        {/* Plan tag */}
         {plan.tag && (
           <div className="bg-blue-600 text-white text-center py-1 px-2 text-sm">
             {plan.tag}
           </div>
         )}
         
-        {/* 计划标题 */}
+        {/* Plan title */}
         <div className="p-6">
           <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
           
-          {/* 价格 */}
+          {/* Price */}
           <div className="mt-4 mb-6">
             {isFree ? (
               <p className="text-3xl font-bold text-gray-900">Free</p>
@@ -82,7 +82,7 @@ export default function PricingPage() {
             <p className="text-gray-600 mt-1">{plan.description}</p>
           </div>
           
-          {/* 积分 */}
+          {/* Credits */}
           <div className="bg-gray-50 p-4 rounded-md mb-6">
             <div className="flex items-center">
               <svg className="h-6 w-6 text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -93,7 +93,7 @@ export default function PricingPage() {
             <p className="text-sm text-gray-600 mt-1">Refreshes monthly</p>
           </div>
           
-          {/* 特性列表 */}
+          {/* Features list */}
           <ul className="mb-6 space-y-3">
             <li className="flex items-center">
               <svg className={`h-5 w-5 ${plan.features.livePortrait ? 'text-green-500' : 'text-gray-400'} mr-2`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -141,7 +141,7 @@ export default function PricingPage() {
             )}
           </ul>
           
-          {/* 操作按钮 */}
+          {/* Action button */}
           {isCurrentPlan ? (
             <button
               disabled
@@ -173,7 +173,7 @@ export default function PricingPage() {
   return (
     <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg min-h-screen">
       <div className="max-w-7xl mx-auto">
-        {/* 页面标题 */}
+        {/* Page title */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">Choose Your Plan</h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -181,7 +181,7 @@ export default function PricingPage() {
           </p>
         </div>
         
-        {/* 错误和成功消息 */}
+        {/* Error and success messages */}
         {error && (
           <div className="mb-8 p-4 bg-red-50 border border-red-200 text-red-600 rounded-md max-w-2xl mx-auto">
             {error}
@@ -194,14 +194,14 @@ export default function PricingPage() {
           </div>
         )}
         
-        {/* 计划卡片 */}
+        {/* Plan cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           {renderPlanCard('free')}
           {renderPlanCard('basic')}
           {renderPlanCard('pro')}
         </div>
         
-        {/* 计划比较 */}
+        {/* Plan comparison */}
         <div className="bg-white rounded-lg shadow-md p-8 mb-12">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Plan Comparison</h2>
           
@@ -211,7 +211,7 @@ export default function PricingPage() {
                 <tr className="border-b border-gray-200">
                   <th className="py-3 px-4 text-left text-gray-600">Feature</th>
                   <th className="py-3 px-4 text-center text-gray-600">Free</th>
-                  <th className="py-3 px-4 text-center text-gray-600">Basic</th>
+                  <th className="py-3 px-4 text-center text-gray-600">Starter</th>
                   <th className="py-3 px-4 text-center text-gray-600">Pro</th>
                 </tr>
               </thead>
@@ -319,7 +319,7 @@ export default function PricingPage() {
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">How long are my results stored?</h3>
               <p className="text-gray-600">
-                Free users can access their results for 24 hours. Basic subscribers have access for 30 days, 
+                Free users can access their results for 24 hours. Starter subscribers have access for 30 days, 
                 and Pro subscribers for 90 days. You can always download your results to keep them permanently.
               </p>
             </div>
@@ -335,7 +335,7 @@ export default function PricingPage() {
         </div>
       </div>
       
-      {/* 登录/注册模态框 */}
+      {/* Auth modal */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
