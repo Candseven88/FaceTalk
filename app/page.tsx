@@ -10,6 +10,7 @@ import TalkingPortrait from './components/TalkingPortrait';
 import EnvChecker from './components/EnvChecker';
 import CreditsInfo from './components/CreditsInfo';
 import FreeCreditsAlert from './components/FreeCreditsAlert';
+import { trackEvent, trackPageView, TikTokEvents } from './utils/analytics';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('livePortrait');
@@ -24,7 +25,27 @@ export default function Home() {
     if (tabParam && ['livePortrait', 'voiceCloning', 'talkingPortrait'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
+
+    // Track page view with TikTok Pixel
+    trackPageView();
   }, [searchParams]);
+
+  // Track tab changes
+  useEffect(() => {
+    if (isVisible) {
+      trackEvent(TikTokEvents.ViewContent, {
+        content_type: 'tab',
+        content_id: activeTab,
+        content_name: `FaceTalk ${activeTab} Tab View`
+      });
+    }
+  }, [activeTab, isVisible]);
+
+  const handleCTAClick = (ctaType: string) => {
+    trackEvent(TikTokEvents.ClickButton, {
+      button_name: ctaType
+    });
+  };
 
   const testimonials = [
     {
@@ -356,10 +377,18 @@ export default function Home() {
             Join thousands of creators who are already bringing their portraits to life with FaceTalk AI. Start your journey today with our free trial.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 animate-fade-in animation-delay-200">
-            <Link href="/get-started" className="bg-white text-facebook-blue px-8 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+            <Link 
+              href="/get-started" 
+              className="bg-white text-facebook-blue px-8 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+              onClick={() => handleCTAClick('start_free_trial')}
+            >
               Start Free Trial
             </Link>
-            <Link href="/pricing" className="bg-transparent text-white border border-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-all duration-300">
+            <Link 
+              href="/pricing" 
+              className="bg-transparent text-white border border-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-all duration-300"
+              onClick={() => handleCTAClick('view_pricing')}
+            >
               View Pricing
             </Link>
           </div>

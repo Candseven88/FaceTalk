@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../lib/useAuth';
+import { trackPurchase } from '../utils/analytics';
 
 export default function PaymentSuccess() {
   const router = useRouter();
@@ -36,9 +37,20 @@ export default function PaymentSuccess() {
         
         // Set points based on plan
         const points = plan === 'starter' ? 20 : 80;
+        const planPrice = plan === 'starter' ? 9.99 : 29.99;
         
         // Update user plan in Firestore
         await updateUserPlan(user.uid, plan, points);
+        
+        // Track purchase event with TikTok Pixel
+        trackPurchase({
+          value: planPrice,
+          currency: 'USD',
+          content_type: 'product',
+          content_id: `facetalk_${plan}_plan`,
+          content_name: `FaceTalk ${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
+          quantity: 1
+        });
         
         setSuccess(true);
         setIsUpdating(false);
