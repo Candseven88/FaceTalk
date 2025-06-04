@@ -16,7 +16,20 @@ type TikTokPixelProps = {
 export default function TikTokPixel({ pixelId }: TikTokPixelProps) {
   useEffect(() => {
     // Skip if already initialized or running on server
-    if (typeof window === 'undefined' || window.ttq) return;
+    if (typeof window === 'undefined' || !pixelId) return;
+
+    // Clean up any existing instance to prevent duplicates
+    if (window.ttq) {
+      console.log('Existing TikTok Pixel found, cleaning up before reinitializing');
+      try {
+        const existingScript = document.querySelector('script[src*="analytics.tiktok.com"]');
+        if (existingScript && existingScript.parentNode) {
+          existingScript.parentNode.removeChild(existingScript);
+        }
+      } catch (e) {
+        console.error('Error cleaning up TikTok Pixel:', e);
+      }
+    }
 
     // Initialize TikTok Pixel
     window.TiktokAnalyticsObject = 'ttq';
@@ -62,10 +75,27 @@ export default function TikTokPixel({ pixelId }: TikTokPixelProps) {
 
     // Initialize the pixel
     window.ttq.page();
+    
+    // Force trigger important events to activate them in TikTok Ads Manager
+    setTimeout(() => {
+      console.log('Triggering initial ViewContent event for TikTok Pixel');
+      trackTikTokEvent('ViewContent', {
+        content_type: 'product',
+        content_id: 'homepage_view',
+        content_name: 'FaceTalk Homepage'
+      });
+      
+      // Fire a test Purchase event to activate CompletePayment
+      trackTikTokEvent('CompletePayment', {
+        value: 0.01,
+        currency: 'USD',
+        content_type: 'product',
+        content_id: 'test_event'
+      });
+    }, 2000);
 
     return () => {
-      // Cleanup if needed
-      document.head.removeChild(script);
+      // No cleanup needed, as we want the pixel to persist
     };
   }, [pixelId]);
 
@@ -75,6 +105,9 @@ export default function TikTokPixel({ pixelId }: TikTokPixelProps) {
 // Helper functions for tracking events
 export const trackTikTokEvent = (event: string, data?: any) => {
   if (typeof window !== 'undefined' && window.ttq) {
+    console.log(`Tracking TikTok event: ${event}`, data);
     window.ttq.track(event, data);
+  } else {
+    console.warn('TikTok Pixel not available for event:', event);
   }
 }; 

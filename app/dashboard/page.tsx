@@ -111,7 +111,11 @@ export default function Dashboard() {
         if (user) {
           try {
             console.log('Fetching generations from Firebase for user:', user.uid);
-            const results = await getUserGenerations(user.uid);
+            // Add a timeout to prevent hanging forever if Firebase doesn't respond
+            const timeoutPromise = new Promise<[]>((_, reject) => {
+              setTimeout(() => reject(new Error('Firebase request timeout')), 10000);
+            });
+            const results = await Promise.race([getUserGenerations(user.uid), timeoutPromise]);
             firebaseGenerations = results.map((gen: any) => ({
               ...gen,
               name: `${gen.type.charAt(0).toUpperCase() + gen.type.slice(1)} Generation`,
@@ -119,6 +123,7 @@ export default function Dashboard() {
             }));
           } catch (error) {
             console.error('Error fetching generations from Firebase:', error);
+            // Continue with local generations if Firebase fails
           }
         }
         
@@ -153,6 +158,8 @@ export default function Dashboard() {
         setGenerations(allGenerations);
       } catch (error) {
         console.error('Error loading generations:', error);
+        // Set empty generations array to prevent infinite loading
+        setGenerations([]);
       } finally {
         setIsLoadingGenerations(false);
       }

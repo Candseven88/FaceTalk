@@ -100,8 +100,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } catch (error) {
         console.error("Error during anonymous authentication:", error);
+        // Clear any problematic stored UID that might be causing errors
+        localStorage.removeItem(LOCAL_STORAGE_UID_KEY);
+        
+        // Try one more time after a delay
+        setTimeout(async () => {
+          try {
+            const result = await signInAnonymously();
+            if (result.user) {
+              localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+              console.log("Retry: Anonymous user created successfully", result.user.uid);
+            }
+          } catch (retryError) {
+            console.error("Retry error during anonymous authentication:", retryError);
+          }
+        }, 1000);
       }
     };
+
+    // Use a timeout to prevent indefinite loading state
+    const authTimeoutId = setTimeout(() => {
+      if (loading) {
+        console.log('Auth state is still loading after timeout, forcing state update');
+        setLoading(false);
+        
+        // If we have no user after timeout, create an anonymous one
+        if (!user) {
+          initializeAuth();
+        }
+      }
+    }, 5000);
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser: User | null) => {
       console.log('Auth state changed, user:', currentUser ? currentUser.uid : 'null');
@@ -217,6 +245,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       console.log('Unsubscribing from auth state changes');
       unsubscribeAuth();
+      clearTimeout(authTimeoutId);
     };
   }, []);
 

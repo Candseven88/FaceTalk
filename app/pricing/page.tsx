@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/useAuth';
 import { useSubscription, SUBSCRIPTION_PLANS } from '../../lib/useSubscription';
 import AuthForms from '../components/AuthForms';
 import Link from 'next/link';
+import { trackPageView, trackViewContent } from '../utils/analytics';
 
 export default function PricingPage() {
   const { user, loading: authLoading } = useAuth();
@@ -20,13 +21,28 @@ export default function PricingPage() {
   
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   
   const currentPlan = getCurrentPlan();
   const isSubscribed = hasActiveSubscription();
   
+  // Track page view when component mounts
+  useEffect(() => {
+    // Track regular page view
+    trackPageView('Pricing');
+    
+    // Track detailed ViewContent event
+    trackViewContent({
+      content_type: 'product_list',
+      content_id: 'pricing_plans',
+      content_name: 'Subscription Plans'
+    });
+  }, []);
+  
   // Handle subscription button click
   const handleSubscribeClick = (plan: 'basic' | 'pro') => {
     setSelectedPlan(plan);
+    setLocalError(null);
     
     // If user is not logged in, show login/register modal
     if (!user) {
@@ -35,7 +51,13 @@ export default function PricingPage() {
     }
     
     // Otherwise redirect to payment page
-    window.location.href = getPaymentLink(plan);
+    try {
+      const paymentLink = getPaymentLink(plan);
+      window.location.href = paymentLink;
+    } catch (err) {
+      console.error('Error getting payment link:', err);
+      setLocalError('Unable to generate payment link. Please try again later.');
+    }
   };
   
   // Auth success callback
@@ -44,7 +66,16 @@ export default function PricingPage() {
     
     // After successful auth, redirect to payment page if plan was selected
     if (selectedPlan) {
-      window.location.href = getPaymentLink(selectedPlan);
+      try {
+        const paymentLink = getPaymentLink(selectedPlan);
+        // Use a small timeout to ensure the auth state is fully updated
+        setTimeout(() => {
+          window.location.href = paymentLink;
+        }, 500);
+      } catch (err) {
+        console.error('Error getting payment link after auth:', err);
+        setLocalError('Unable to generate payment link. Please try again later.');
+      }
     }
   };
   
@@ -182,9 +213,9 @@ export default function PricingPage() {
         </div>
         
         {/* Error and success messages */}
-        {error && (
+        {(error || localError) && (
           <div className="mb-8 p-4 bg-red-50 border border-red-200 text-red-600 rounded-md max-w-2xl mx-auto">
-            {error}
+            {error || localError}
           </div>
         )}
         
