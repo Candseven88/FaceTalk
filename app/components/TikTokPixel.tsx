@@ -76,21 +76,34 @@ export default function TikTokPixel({ pixelId }: TikTokPixelProps) {
     // Initialize the pixel
     window.ttq.page();
     
-    // Force trigger important events to activate them in TikTok Ads Manager
+    // Force trigger important events to activate them in TikTok Ads Manager with correct parameters
     setTimeout(() => {
       console.log('Triggering initial ViewContent event for TikTok Pixel');
+      // Use valid content_type and include required content_id
       trackTikTokEvent('ViewContent', {
         content_type: 'product',
-        content_id: 'homepage_view',
-        content_name: 'FaceTalk Homepage'
+        content_id: 'homepage_view_001',
+        content_name: 'FaceTalk Homepage',
+        value: 0.00,
+        currency: 'USD'
       });
       
-      // Fire a test Purchase event to activate CompletePayment
+      // Fire a test Purchase event to activate CompletePayment with required fields
       trackTikTokEvent('CompletePayment', {
         value: 0.01,
         currency: 'USD',
         content_type: 'product',
-        content_id: 'test_event'
+        content_id: 'test_purchase_001',
+        contents: [
+          {
+            content_id: 'test_product_001',
+            content_type: 'product',
+            content_name: 'Test Product',
+            quantity: 1,
+            price: 0.01
+          }
+        ],
+        quantity: 1
       });
     }, 2000);
 
@@ -105,6 +118,16 @@ export default function TikTokPixel({ pixelId }: TikTokPixelProps) {
 // Helper functions for tracking events
 export const trackTikTokEvent = (event: string, data?: any) => {
   if (typeof window !== 'undefined' && window.ttq) {
+    // Ensure required parameters are present
+    if (event === 'ViewContent' && (!data || !data.content_id || !data.content_type)) {
+      // Add default values if missing
+      data = {
+        ...data,
+        content_id: data?.content_id || 'default_content_001',
+        content_type: data?.content_type || 'product'
+      };
+    }
+    
     console.log(`Tracking TikTok event: ${event}`, data);
     window.ttq.track(event, data);
   } else {

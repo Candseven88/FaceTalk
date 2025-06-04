@@ -1,732 +1,200 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import Card from '../components/Card';
-import LoadingState from '../components/LoadingState';
-import { useAuth } from '../../lib/useAuth';
-import { getUserGenerations } from '../../lib/firebase';
-import { useRouter, useSearchParams } from 'next/navigation';
-import DiagnosticTool from '../components/DiagnosticTool';
+import { useAuth } from '@/lib/useAuth';
+import { getUserGenerations } from '@/lib/firebase';
+import Link from 'next/link';
+import { trackTikTokEvent } from '../components/TikTokPixel';
 
-// Local storage keys
-const LOCAL_STORAGE_GENERATIONS_KEY = 'facetalk_generations';
-const LOCAL_STORAGE_USERNAME_KEY = 'facetalk_username';
+export default function DashboardPage() {
+  const { user, loading, userPlan } = useAuth();
+  const [generations, setGenerations] = useState<any[]>([]);
+  const [generationsLoading, setGenerationsLoading] = useState(true);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
 
-// Generation record type
-interface Generation {
-  id: string;
-  type: string;
-  result: string;
-  timestamp: any;
-  cost?: number;
-  name?: string;
-  status?: string;
-  userId?: string;
-  local?: boolean; // Mark if this is a locally stored generation
-}
+  // Track page view
+  useEffect(() => {
+    trackTikTokEvent('ViewContent', {
+      content_type: 'product',
+      content_id: 'dashboard_page_001',
+      content_name: 'FaceTalk Dashboard Page',
+      value: 0.00,
+      currency: 'USD'
+    });
+  }, []);
 
-// Extended User type for frontend display
-interface ExtendedUser {
-  uid: string;
-  userId?: string;
-  name?: string;
-  isAnonymous?: boolean;
-}
-
-export default function Dashboard() {
-  const { user, userPlan, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'settings'>('overview');
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [generations, setGenerations] = useState<Generation[]>([]);
-  const [isLoadingGenerations, setIsLoadingGenerations] = useState(true);
-  const [username, setUsername] = useState<string>('User');
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [pageLoading, setPageLoading] = useState(true);
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  
-  // Force loading state to false after timeout
+  // Set timeout for loading state to avoid infinite loading
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (pageLoading) {
-        console.log('Dashboard still loading after timeout, forcing render');
-        setPageLoading(false);
+      if (loading) {
+        console.log('Auth still loading after timeout, showing page anyway');
+        setLoadingTimeout(true);
       }
     }, 3000);
-    
+
     return () => clearTimeout(timer);
-  }, [pageLoading]);
-  
-  // Update page loading state when auth state changes
+  }, [loading]);
+
+  // Load user generations
   useEffect(() => {
-    if (!authLoading) {
-      setPageLoading(false);
-    }
-  }, [authLoading]);
-  
-  // Load username
-  useEffect(() => {
-    // Try to get username from localStorage
-    const storedUsername = localStorage.getItem(LOCAL_STORAGE_USERNAME_KEY);
-    if (storedUsername) {
-      setUsername(storedUsername);
-    } else {
-      // No stored username, generate a default one
-      const defaultName = user?.isAnonymous ? `Guest ${Math.floor(Math.random() * 1000)}` : 'User';
-      setUsername(defaultName);
-      localStorage.setItem(LOCAL_STORAGE_USERNAME_KEY, defaultName);
-    }
-  }, [user]);
-  
-  // Reset error state
-  const resetErrors = () => {
-    setLoadError(null);
-    setRetryCount(prev => prev + 1);
-    setIsLoadingGenerations(true);
-  };
-  
-  // Create extended user object
-  const extendedUser: ExtendedUser = {
-    uid: user?.uid || '',
-    name: username,
-    isAnonymous: user?.isAnonymous || true
-  };
-  
-  // Handle URL params for tab selection
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'history') {
-      setActiveTab('history');
-    } else if (tab === 'settings') {
-      setActiveTab('settings');
-    } else {
-      setActiveTab('overview');
-    }
-  }, [searchParams]);
-  
-  // Load generation history
-  useEffect(() => {
-    // Skip if page is still loading auth
-    if (authLoading && !user) return;
-    
     const loadGenerations = async () => {
-      setIsLoadingGenerations(true);
-      setLoadError(null);
+      if (!user && !loadingTimeout) {
+        // Force loading to false after 5 seconds to prevent infinite loading
+        const timer = setTimeout(() => {
+          console.log('Dashboard still loading after timeout, forcing render');
+          setGenerationsLoading(false);
+        }, 5000);
+        
+        return () => clearTimeout(timer);
+      }
       
       try {
-        // First load any locally cached generations for immediate UI response
-        let localGenerations: Generation[] = [];
-        try {
-          const localData = localStorage.getItem(LOCAL_STORAGE_GENERATIONS_KEY);
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            if (Array.isArray(parsed)) {
-              localGenerations = parsed.filter(item => 
-                item && item.type && item.result && item.timestamp
-              ).map(item => ({
-                ...item,
-                local: true,
-                name: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} Generation`,
-                status: 'completed'
-              }));
-              
-              // Show local generations immediately
-              if (localGenerations.length > 0) {
-                setGenerations(localGenerations);
-                setIsLoadingGenerations(false);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error loading generations from localStorage:', error);
-        }
+        setGenerationsLoading(true);
         
-        // If user is logged in, try to get generation history from Firebase
-        let firebaseGenerations: Generation[] = [];
         if (user) {
-          try {
-            console.log('Fetching generations from Firebase for user:', user.uid);
-            // Add a timeout to prevent hanging forever if Firebase doesn't respond
-            const timeoutPromise = new Promise<[]>((_, reject) => {
-              setTimeout(() => reject(new Error('Firebase request timeout')), 5000);
-            });
-            
-            // Wrap the Firebase call in try-catch for more granular error handling
-            const fetchPromise = (async () => {
-              try {
-                return await getUserGenerations(user.uid);
-              } catch (err) {
-                console.error('Firebase fetch error:', err);
-                throw new Error('Failed to fetch data from Firebase');
-              }
-            })();
-            
-            const results = await Promise.race([fetchPromise, timeoutPromise]);
-            firebaseGenerations = results.map((gen: any) => ({
-              ...gen,
-              name: `${gen.type.charAt(0).toUpperCase() + gen.type.slice(1)} Generation`,
-              status: 'completed'
-            }));
-            
-            // Merge and update with Firebase data
-            let allGenerations = [...localGenerations, ...firebaseGenerations];
-            
-            // Deduplicate
-            const uniqueIds = new Set();
-            allGenerations = allGenerations.filter(gen => {
-              if (gen.local && !gen.id) {
-                gen.id = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-              }
-              
-              if (uniqueIds.has(gen.id)) {
-                return false;
-              }
-              
-              uniqueIds.add(gen.id);
-              return true;
-            });
-            
-            // Sort by time
-            allGenerations.sort((a, b) => {
-              const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-              const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-              return dateB.getTime() - dateA.getTime();
-            });
-            
-            setGenerations(allGenerations);
-          } catch (error) {
-            console.error('Error fetching generations from Firebase:', error);
-            // Only show error if we don't have local generations
-            if (localGenerations.length === 0) {
-              setLoadError('Unable to load cloud data. Showing local records only.');
-            }
-          }
+          const userGenerations = await getUserGenerations(user.uid, 10);
+          console.log('Loaded generations:', userGenerations.length);
+          setGenerations(userGenerations);
+        } else {
+          // If we reach this point after timeout but no user, show empty state
+          setGenerations([]);
         }
       } catch (error) {
         console.error('Error loading generations:', error);
-        setLoadError('Error loading data. Please try again later.');
+        setGenerations([]);
       } finally {
-        setIsLoadingGenerations(false);
+        setGenerationsLoading(false);
       }
     };
-    
+
     loadGenerations();
-    
-    // Set timeout to ensure loading state doesn't continue indefinitely
-    const timeoutId = setTimeout(() => {
-      if (isLoadingGenerations) {
-        console.log('Loading timeout reached, stopping loading state');
-        setIsLoadingGenerations(false);
-        
-        // If failed to load data successfully, show error message
-        if (generations.length === 0) {
-          setLoadError('Loading timed out. Please refresh the page to try again.');
-        }
-      }
-    }, 8000);
-    
-    return () => clearTimeout(timeoutId);
-  }, [user, authLoading, retryCount]);
-  
-  // Redirect if not authenticated after auth loading finishes
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/get-started');
-    }
-  }, [user, authLoading, router]);
+  }, [user, loadingTimeout]);
 
-  // If still loading, show loading state
-  if ((authLoading || pageLoading) && !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="Loading dashboard..." />
-      </div>
-    );
-  }
-  
-  // If not authenticated, redirect to get-started
-  if (!user) {
-    router.push('/get-started');
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="Redirecting..." />
-      </div>
-    );
-  }
-
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-  
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: { duration: 0.4 }
-    }
-  };
-  
-  // Handle tab change with URL update
-  const handleTabChange = (tab: 'overview' | 'history' | 'settings') => {
-    setActiveTab(tab);
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab !== 'overview') {
-      params.set('tab', tab);
-    } else {
-      params.delete('tab');
-    }
-    
-    router.push(`/dashboard${params.toString() ? `?${params.toString()}` : ''}`);
-  };
-  
-  // Format date
-  const formatDate = (timestamp: any): string => {
-    try {
-      const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
-      return date.toLocaleDateString();
-    } catch (e) {
-      return 'Unknown date';
-    }
-  };
-  
-  // Open generation result
-  const viewGeneration = (generation: Generation) => {
-    if (generation.result) {
-      window.open(generation.result, '_blank');
-    }
-  };
-  
-  // Download generation result
-  const downloadGeneration = (generation: Generation) => {
-    if (generation.result) {
-      const link = document.createElement('a');
-      link.href = generation.result;
-      link.download = `${generation.type}-${generation.id}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  // Calculate used points
-  const usedPoints = userPlan?.usedPoints || 0;
-  // Calculate total points
-  const totalPoints = (userPlan?.pointsLeft || 0) + usedPoints;
-  // Calculate usage percentage
-  const usagePercent = totalPoints > 0 ? (usedPoints / totalPoints) * 100 : 0;
+  // Show content even if still loading after timeout
+  const shouldShowContent = !loading || loadingTimeout;
 
   return (
-    <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center"
-          >
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {extendedUser.name}!</h1>
-            <p className="text-gray-600 mt-2">User ID: {extendedUser.uid}</p>
-          </motion.div>
-        </div>
-
-        {/* Error message display */}
-        {loadError && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-            <span className="block sm:inline">{loadError}</span>
-            <button 
-              onClick={resetErrors}
-              className="absolute top-0 bottom-0 right-0 px-4 py-3"
-            >
-              <span className="text-blue-500 hover:text-blue-700">Retry</span>
-            </button>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+      
+      {!shouldShowContent ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading dashboard...</p>
           </div>
-        )}
-
-        {/* Add diagnostic tool */}
-        <div className="mb-6">
-          <DiagnosticTool />
         </div>
-
-        {/* Dashboard Tabs */}
-        <div className="flex justify-center mb-8 border-b border-gray-200 overflow-x-auto">
-          <button
-            onClick={() => handleTabChange('overview')}
-            className={`relative py-4 px-4 border-b-2 font-medium text-sm mx-4 whitespace-nowrap transition-all duration-300 ${
-              activeTab === 'overview'
-                ? 'border-facebook-blue text-facebook-blue'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Overview
-            {activeTab === 'overview' && (
-              <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
-            )}
-          </button>
-          <button
-            onClick={() => handleTabChange('history')}
-            className={`relative py-4 px-4 border-b-2 font-medium text-sm mx-4 whitespace-nowrap transition-all duration-300 ${
-              activeTab === 'history'
-                ? 'border-facebook-blue text-facebook-blue'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Generation History
-            {activeTab === 'history' && (
-              <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
-            )}
-          </button>
-          <button
-            onClick={() => handleTabChange('settings')}
-            className={`relative py-4 px-4 border-b-2 font-medium text-sm mx-4 whitespace-nowrap transition-all duration-300 ${
-              activeTab === 'settings'
-                ? 'border-facebook-blue text-facebook-blue'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Account Settings
-            {activeTab === 'settings' && (
-              <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
-            )}
-          </button>
-        </div>
-
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            {/* Subscription Info & Credit Usage */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <motion.div variants={itemVariants}>
-                <Card title="Current Subscription" subtitle="Your plan details">
-                  <div className="mt-2">
-                    <div className="inline-block bg-blue-100 text-facebook-blue text-sm font-semibold px-2.5 py-0.5 rounded-full mb-2">
-                      {userPlan?.plan === 'free' ? 'Free Trial' : 
-                       userPlan?.plan === 'starter' ? 'Starter Plan' : 
-                       userPlan?.plan === 'pro' ? 'Pro Plan' : 'Free Trial'}
-                    </div>
-                    <p className="text-sm text-gray-600">Next billing: <span className="font-medium text-gray-900">2025-06-30</span></p>
-                    <div className="mt-4">
-                      <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        Manage Subscription
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-
-              <motion.div variants={itemVariants} className="md:col-span-2">
-                <Card title="Credits Usage" subtitle="This month's credit usage">
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700">
-                          Credits used: {usedPoints}/{totalPoints || 10}
-                        </span>
-                        <span className="text-sm font-medium text-facebook-blue">{userPlan?.pointsLeft || 10} remaining</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div 
-                          className="bg-facebook-blue h-2.5 rounded-full"
-                          style={{ width: `${usagePercent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <div>
-                        <span className="block font-medium text-gray-900 mb-1">Credits reset monthly</span>
-                        <span>Next reset on 2025-06-30</span>
-                      </div>
-                      <button className="btn-primary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        Get More Credits
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            </div>
-
-            {/* Recent Generations */}
-            <motion.div variants={itemVariants}>
-              <Card title="Recent Generations" subtitle="Your latest creations" className="overflow-hidden">
-                <div className="flex justify-end mb-4">
-                  <button 
-                    onClick={() => router.push('/live-portrait')}
-                    className="text-sm btn-secondary px-3 py-1.5 flex items-center"
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* User Info Card */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">Account</h2>
+            <div className="space-y-3">
+              <p>
+                <span className="font-medium text-gray-700">Plan: </span>
+                <span className="capitalize">{userPlan?.plan || 'Free'}</span>
+              </p>
+              <p>
+                <span className="font-medium text-gray-700">Credits: </span>
+                {userPlan?.pointsLeft || 0} points left
+              </p>
+              {userPlan?.plan !== 'free' && (
+                <p className="text-sm text-gray-500">
+                  Credits refresh monthly on your subscription date.
+                </p>
+              )}
+              {userPlan?.plan === 'free' && (
+                <div className="mt-4">
+                  <Link 
+                    href="/pricing" 
+                    className="inline-block bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Create New Generation
-                  </button>
+                    Upgrade Plan
+                  </Link>
                 </div>
-                
-                {isLoadingGenerations ? (
-                  <div className="text-center py-8">
-                    <LoadingState type="spinner" message="Loading your generations..." />
-                  </div>
-                ) : generations.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>You haven't created any generations yet.</p>
-                    <button 
-                      onClick={() => router.push('/live-portrait')}
-                      className="mt-4 btn-primary"
-                    >
-                      Create Your First Generation
-                    </button>
-                  </div>
-                ) : (
-                  <div className="-mx-6 -mb-6">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Type
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Date
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Cost
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Storage
-                            </th>
-                            <th scope="col" className="relative px-6 py-3">
-                              <span className="sr-only">Actions</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {generations.slice(0, 3).map((generation) => (
-                            <tr key={generation.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {generation.type.charAt(0).toUpperCase() + generation.type.slice(1)}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{formatDate(generation.timestamp)}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.cost || 2} points</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  generation.local
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-green-100 text-green-800'
-                                }`}>
-                                  {generation.local ? 'Local' : 'Cloud'}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button 
-                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
-                                  onClick={() => viewGeneration(generation)}
-                                >
-                                  View
-                                </button>
-                                <button 
-                                  className="text-facebook-blue hover:text-facebook-hover"
-                                  onClick={() => downloadGeneration(generation)}
-                                >
-                                  Download
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+              )}
+            </div>
+          </div>
+          
+          {/* Features Card */}
+          <div className="bg-white rounded-lg shadow p-6 md:col-span-2">
+            <h2 className="text-xl font-semibold mb-4">Features</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Link 
+                href="/live-portrait" 
+                className="bg-blue-50 border border-blue-100 p-4 rounded-lg hover:bg-blue-100 transition"
+              >
+                <h3 className="font-medium text-blue-800 mb-2">Live Portrait</h3>
+                <p className="text-sm text-gray-600">Create a real-time animated portrait from your photo.</p>
+                <p className="text-xs text-gray-500 mt-2">2 credits per generation</p>
+              </Link>
+              
+              <Link 
+                href="/voice-clone" 
+                className="bg-green-50 border border-green-100 p-4 rounded-lg hover:bg-green-100 transition"
+              >
+                <h3 className="font-medium text-green-800 mb-2">Voice Clone</h3>
+                <p className="text-sm text-gray-600">Clone your voice with just a short audio sample.</p>
+                <p className="text-xs text-gray-500 mt-2">1 credit per generation</p>
+              </Link>
+              
+              <Link 
+                href="/talking-avatar" 
+                className="bg-purple-50 border border-purple-100 p-4 rounded-lg hover:bg-purple-100 transition"
+              >
+                <h3 className="font-medium text-purple-800 mb-2">Talking Avatar</h3>
+                <p className="text-sm text-gray-600">Make your portrait talk with your cloned voice.</p>
+                <p className="text-xs text-gray-500 mt-2">4 credits per generation</p>
+              </Link>
+            </div>
+          </div>
+          
+          {/* Recent Generations Card */}
+          <div className="bg-white rounded-lg shadow p-6 md:col-span-3">
+            <h2 className="text-xl font-semibold mb-4">Recent Generations</h2>
+            {generationsLoading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+              </div>
+            ) : generations.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {generations.map((gen) => (
+                  <div key={gen.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium capitalize">{gen.type}</h3>
+                        <p className="text-xs text-gray-500">
+                          {new Date(gen.timestamp?.toDate?.() || gen.timestamp).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                        {gen.cost || 0} credits
+                      </span>
                     </div>
-                    
-                    {generations.length > 3 && (
-                      <div className="text-center bg-gray-50 py-3 border-t border-gray-200">
-                        <button 
-                          onClick={() => handleTabChange('history')}
-                          className="text-sm text-facebook-blue hover:text-facebook-hover font-medium"
-                        >
-                          View All Generations
-                        </button>
+                    {gen.result && (
+                      <div className="mt-2 text-sm">
+                        <p className="truncate">{gen.result}</p>
                       </div>
                     )}
                   </div>
-                )}
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {/* History Tab */}
-        {activeTab === 'history' && (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <motion.div variants={itemVariants}>
-              <Card className="overflow-hidden">
-                {isLoadingGenerations ? (
-                  <div className="text-center py-8">
-                    <LoadingState type="spinner" message="Loading your generations..." />
-                  </div>
-                ) : generations.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>You haven't created any generations yet.</p>
-                    <button 
-                      onClick={() => router.push('/live-portrait')}
-                      className="mt-4 btn-primary"
-                    >
-                      Create Your First Generation
-                    </button>
-                  </div>
-                ) : (
-                  <div className="-mx-6 -my-6">
-                    <div className="flex justify-between items-center bg-gray-50 px-6 py-4 border-b border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900">Generation History</h3>
-                      <div className="flex items-center space-x-2">
-                        <select className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-facebook-blue">
-                          <option value="all">All Types</option>
-                          <option value="livePortrait">Live Portrait</option>
-                          <option value="voiceClone">Voice Clone</option>
-                          <option value="talkingPortrait">Talking Avatar</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Type
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Date
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Cost
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Storage
-                            </th>
-                            <th scope="col" className="relative px-6 py-3">
-                              <span className="sr-only">Actions</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {generations.map((generation) => (
-                            <tr key={generation.id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {generation.type.charAt(0).toUpperCase() + generation.type.slice(1)}
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{formatDate(generation.timestamp)}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm text-gray-500">{generation.cost || 2} points</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  generation.local
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-green-100 text-green-800'
-                                }`}>
-                                  {generation.local ? 'Local' : 'Cloud'}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button 
-                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
-                                  onClick={() => viewGeneration(generation)}
-                                >
-                                  View
-                                </button>
-                                <button 
-                                  className="text-facebook-blue hover:text-facebook-hover mr-3"
-                                  onClick={() => downloadGeneration(generation)}
-                                >
-                                  Download
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    
-                    <div className="flex justify-between items-center bg-gray-50 px-6 py-3 border-t border-gray-200">
-                      <span className="text-sm text-gray-500">Showing {generations.length} items</span>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            <motion.div variants={itemVariants}>
-              <Card title="Account Settings" subtitle="Manage your account details">
-                <div className="mt-4 space-y-6">
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Profile Information</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="name" className="block text-sm text-gray-600 mb-1">Display Name</label>
-                        <input 
-                          type="text" 
-                          id="name" 
-                          defaultValue={extendedUser.name}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-facebook-blue focus:border-facebook-blue"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="uid" className="block text-sm text-gray-600 mb-1">User ID (cannot change)</label>
-                        <input 
-                          type="text" 
-                          id="uid" 
-                          defaultValue={extendedUser.uid}
-                          disabled
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4 border-t border-gray-200 flex justify-end">
-                    <button className="btn-primary">
-                      Save Changes
-                    </button>
-                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No generations yet. Try creating one!</p>
+                <div className="mt-4">
+                  <Link 
+                    href="/live-portrait" 
+                    className="inline-block bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition"
+                  >
+                    Create Your First Generation
+                  </Link>
                 </div>
-              </Card>
-            </motion.div>
-          </motion.div>
-        )}
-      </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
