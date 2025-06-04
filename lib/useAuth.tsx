@@ -53,11 +53,13 @@ export const useAuth = () => useContext(AuthContext);
 
 // 本地存储的键名
 const LOCAL_STORAGE_UID_KEY = 'facetalk_user_uid';
+const LOCAL_STORAGE_AUTH_STATE = 'facetalk_auth_state';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userPlan, setUserPlan] = useState<UserPlanData | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   // Feature credit costs
   const FEATURE_COSTS = {
@@ -68,11 +70,73 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   console.log('AuthProvider initialized');
 
+  // Force sync auth state with localStorage for cross-tab communication
+  useEffect(() => {
+    if (user) {
+      // Save auth state to localStorage when user changes
+      localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+        isLoggedIn: true,
+        uid: user.uid,
+        isAnonymous: user.isAnonymous,
+        lastUpdated: new Date().toISOString()
+      }));
+    }
+  }, [user]);
+
+  // Listen for storage events to sync auth state across tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_AUTH_STATE) {
+        console.log('Auth state changed in another tab');
+        try {
+          const authState = JSON.parse(e.newValue || '{}');
+          if (authState.isLoggedIn && authState.uid && !user) {
+            console.log('Another tab logged in, refreshing auth state');
+            window.location.reload();
+          } else if (!authState.isLoggedIn && user) {
+            console.log('Another tab logged out, refreshing auth state');
+            window.location.reload();
+          }
+        } catch (error) {
+          console.error('Error parsing auth state from storage', error);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user]);
+
   useEffect(() => {
     console.log('AuthProvider useEffect running');
     // Create an anonymous user if not logged in
     const initializeAuth = async () => {
       try {
+        // Try to read cached auth state from localStorage first for immediate UI response
+        const cachedAuthState = localStorage.getItem(LOCAL_STORAGE_AUTH_STATE);
+        if (cachedAuthState) {
+          try {
+            const authState = JSON.parse(cachedAuthState);
+            // Only use cached state if it's recent (last 30 minutes)
+            const lastUpdated = new Date(authState.lastUpdated);
+            const isRecent = (new Date().getTime() - lastUpdated.getTime()) < 30 * 60 * 1000;
+            
+            if (authState.isLoggedIn && isRecent) {
+              console.log('Using cached auth state', authState);
+              // Simulate user object for immediate UI response while Firebase initializes
+              if (!user) {
+                setUser({
+                  uid: authState.uid,
+                  isAnonymous: authState.isAnonymous || false
+                } as User);
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing cached auth state', error);
+            localStorage.removeItem(LOCAL_STORAGE_AUTH_STATE);
+          }
+        }
+
         // 检查localStorage中是否存在存储的用户ID
         const storedUid = localStorage.getItem(LOCAL_STORAGE_UID_KEY);
         console.log('Stored UID from localStorage:', storedUid);
@@ -81,6 +145,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.log('Current user exists:', auth.currentUser.uid);
           // 确保存储当前用户的UID
           localStorage.setItem(LOCAL_STORAGE_UID_KEY, auth.currentUser.uid);
+          
+          // Update auth state in localStorage
+          localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+            isLoggedIn: true,
+            uid: auth.currentUser.uid,
+            isAnonymous: auth.currentUser.isAnonymous,
+            lastUpdated: new Date().toISOString()
+          }));
         } else if (storedUid) {
           console.log('No current user but found stored UID:', storedUid);
           // 我们有存储的UID但没有当前用户，这可能是因为页面刷新
@@ -96,8 +168,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (result.user) {
             localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
             console.log("User ID saved to localStorage:", result.user.uid);
+            
+            // Update auth state in localStorage
+            localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+              isLoggedIn: true,
+              uid: result.user.uid,
+              isAnonymous: true,
+              lastUpdated: new Date().toISOString()
+            }));
           }
         }
+        
+        setAuthInitialized(true);
       } catch (error) {
         console.error("Error during anonymous authentication:", error);
         // Clear any problematic stored UID that might be causing errors
@@ -110,9 +192,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (result.user) {
               localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
               console.log("Retry: Anonymous user created successfully", result.user.uid);
+              
+              // Update auth state in localStorage
+              localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+                isLoggedIn: true,
+                uid: result.user.uid,
+                isAnonymous: true,
+                lastUpdated: new Date().toISOString()
+              }));
             }
+            setAuthInitialized(true);
           } catch (retryError) {
             console.error("Retry error during anonymous authentication:", retryError);
+            setAuthInitialized(true);
           }
         }, 1000);
       }
@@ -123,6 +215,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (loading) {
         console.log('Auth state is still loading after timeout, forcing state update');
         setLoading(false);
+        setAuthInitialized(true);
         
         // If we have no user after timeout, create an anonymous one
         if (!user) {
@@ -140,6 +233,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // 确保UID保存到localStorage，用于跨会话持久化
         localStorage.setItem(LOCAL_STORAGE_UID_KEY, currentUser.uid);
         console.log("User ID saved/updated in localStorage");
+        
+        // Update auth state in localStorage
+        localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+          isLoggedIn: true,
+          uid: currentUser.uid,
+          isAnonymous: currentUser.isAnonymous,
+          lastUpdated: new Date().toISOString()
+        }));
         
         setUser(currentUser);
         
@@ -216,6 +317,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
       } else {
         console.log('No authenticated user');
+        
+        // Update auth state in localStorage to reflect logged out state
+        localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+          isLoggedIn: false,
+          lastUpdated: new Date().toISOString()
+        }));
+        
         setUserPlan(null);
         setLoading(false);
         
@@ -230,6 +338,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log("Created new anonymous user:", result.user?.uid);
             if (result.user) {
               localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+              
+              // Update auth state in localStorage
+              localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+                isLoggedIn: true,
+                uid: result.user.uid,
+                isAnonymous: true,
+                lastUpdated: new Date().toISOString()
+              }));
               
               // 确保新创建的匿名用户有默认积分
               localStorage.setItem('facetalk_points', '4');

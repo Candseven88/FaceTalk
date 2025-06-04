@@ -41,6 +41,8 @@ export default function Dashboard() {
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [isLoadingGenerations, setIsLoadingGenerations] = useState(true);
   const [username, setUsername] = useState<string>('User');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -57,6 +59,13 @@ export default function Dashboard() {
       localStorage.setItem(LOCAL_STORAGE_USERNAME_KEY, defaultName);
     }
   }, [user]);
+  
+  // 重置错误状态
+  const resetErrors = () => {
+    setLoadError(null);
+    setRetryCount(prev => prev + 1);
+    setIsLoadingGenerations(true);
+  };
   
   // 创建扩展的用户对象
   const extendedUser: ExtendedUser = {
@@ -80,7 +89,13 @@ export default function Dashboard() {
   // 加载生成历史
   useEffect(() => {
     const loadGenerations = async () => {
+      // 如果正在加载认证状态，延迟加载生成记录
+      if (authLoading) {
+        return;
+      }
+      
       setIsLoadingGenerations(true);
+      setLoadError(null);
       
       try {
         // 从localStorage获取生成历史
@@ -113,9 +128,20 @@ export default function Dashboard() {
             console.log('Fetching generations from Firebase for user:', user.uid);
             // Add a timeout to prevent hanging forever if Firebase doesn't respond
             const timeoutPromise = new Promise<[]>((_, reject) => {
-              setTimeout(() => reject(new Error('Firebase request timeout')), 10000);
+              setTimeout(() => reject(new Error('Firebase request timeout')), 8000);
             });
-            const results = await Promise.race([getUserGenerations(user.uid), timeoutPromise]);
+            
+            // Wrap the Firebase call in try-catch for more granular error handling
+            const fetchPromise = (async () => {
+              try {
+                return await getUserGenerations(user.uid);
+              } catch (err) {
+                console.error('Firebase fetch error:', err);
+                throw new Error('Failed to fetch data from Firebase');
+              }
+            })();
+            
+            const results = await Promise.race([fetchPromise, timeoutPromise]);
             firebaseGenerations = results.map((gen: any) => ({
               ...gen,
               name: `${gen.type.charAt(0).toUpperCase() + gen.type.slice(1)} Generation`,
@@ -124,6 +150,8 @@ export default function Dashboard() {
           } catch (error) {
             console.error('Error fetching generations from Firebase:', error);
             // Continue with local generations if Firebase fails
+            // But set error message to inform user
+            setLoadError('无法从云端加载数据，显示本地记录');
           }
         }
         
@@ -160,15 +188,32 @@ export default function Dashboard() {
         console.error('Error loading generations:', error);
         // Set empty generations array to prevent infinite loading
         setGenerations([]);
+        setLoadError('加载数据时出错，请稍后再试');
       } finally {
         setIsLoadingGenerations(false);
       }
     };
     
+    // 只有当认证完成后才加载生成记录
     if (!authLoading) {
       loadGenerations();
     }
-  }, [user, authLoading]);
+    
+    // 设置超时，确保加载状态不会无限持续
+    const timeoutId = setTimeout(() => {
+      if (isLoadingGenerations) {
+        console.log('Loading timeout reached, stopping loading state');
+        setIsLoadingGenerations(false);
+        
+        // 如果没有成功加载数据，显示错误消息
+        if (generations.length === 0) {
+          setLoadError('加载超时，请刷新页面重试');
+        }
+      }
+    }, 15000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [user, authLoading, retryCount]);
   
   // Redirect if not authenticated
   useEffect(() => {
@@ -177,11 +222,21 @@ export default function Dashboard() {
     }
   }, [user, authLoading, router]);
 
-  // If still loading or no user, show loading state
-  if (authLoading || !user) {
+  // If still loading auth, show loading state
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="Loading your dashboard..." />
+        <LoadingState type="spinner" message="正在加载认证信息..." />
+      </div>
+    );
+  }
+
+  // If not authenticated, redirect to get-started
+  if (!user) {
+    router.push('/get-started');
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
+        <LoadingState type="spinner" message="正在准备页面..." />
       </div>
     );
   }
@@ -265,10 +320,23 @@ export default function Dashboard() {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {extendedUser.name}!</h1>
-            <p className="text-gray-600 mt-2">User ID: {extendedUser.uid}</p>
+            <h1 className="text-3xl font-bold text-gray-900">欢迎回来, {extendedUser.name}!</h1>
+            <p className="text-gray-600 mt-2">用户ID: {extendedUser.uid}</p>
           </motion.div>
         </div>
+
+        {/* 错误信息显示 */}
+        {loadError && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
+            <span className="block sm:inline">{loadError}</span>
+            <button 
+              onClick={resetErrors}
+              className="absolute top-0 bottom-0 right-0 px-4 py-3"
+            >
+              <span className="text-blue-500 hover:text-blue-700">重试</span>
+            </button>
+          </div>
+        )}
 
         {/* 添加诊断工具 */}
         <div className="mb-6">
@@ -285,7 +353,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Overview
+            概览
             {activeTab === 'overview' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -298,7 +366,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Generation History
+            生成历史
             {activeTab === 'history' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -311,7 +379,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            Account Settings
+            账户设置
             {activeTab === 'settings' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -328,15 +396,17 @@ export default function Dashboard() {
             {/* Subscription Info & Credit Usage */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <motion.div variants={itemVariants}>
-                <Card title="Current Subscription" subtitle="Your plan details">
+                <Card title="当前订阅" subtitle="您的方案详情">
                   <div className="mt-2">
                     <div className="inline-block bg-blue-100 text-facebook-blue text-sm font-semibold px-2.5 py-0.5 rounded-full mb-2">
-                      {userPlan?.plan || 'Free Trial'}
+                      {userPlan?.plan === 'free' ? '免费试用' : 
+                       userPlan?.plan === 'starter' ? '入门方案' : 
+                       userPlan?.plan === 'pro' ? '专业方案' : '免费试用'}
                     </div>
-                    <p className="text-sm text-gray-600">Next billing: <span className="font-medium text-gray-900">2025-06-30</span></p>
+                    <p className="text-sm text-gray-600">下次续费: <span className="font-medium text-gray-900">2025-06-30</span></p>
                     <div className="mt-4">
                       <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        Manage Subscription
+                        管理订阅
                       </button>
                     </div>
                   </div>
@@ -344,14 +414,14 @@ export default function Dashboard() {
               </motion.div>
 
               <motion.div variants={itemVariants} className="md:col-span-2">
-                <Card title="Generation Usage" subtitle="This month's credit usage">
+                <Card title="积分使用情况" subtitle="本月积分使用">
                   <div className="mt-4 space-y-4">
                     <div>
                       <div className="flex justify-between mb-1">
                         <span className="text-sm font-medium text-gray-700">
-                          Credits used: {usedPoints}/{totalPoints || 10}
+                          已用积分: {usedPoints}/{totalPoints || 10}
                         </span>
-                        <span className="text-sm font-medium text-facebook-blue">{userPlan?.pointsLeft || 10} remaining</span>
+                        <span className="text-sm font-medium text-facebook-blue">剩余 {userPlan?.pointsLeft || 10} 积分</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div 
@@ -362,11 +432,11 @@ export default function Dashboard() {
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
                       <div>
-                        <span className="block font-medium text-gray-900 mb-1">Credits reset monthly</span>
-                        <span>Next reset on 2025-06-30</span>
+                        <span className="block font-medium text-gray-900 mb-1">积分每月重置</span>
+                        <span>下次重置时间: 2025-06-30</span>
                       </div>
                       <button className="btn-primary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        Get More Credits
+                        获取更多积分
                       </button>
                     </div>
                   </div>
