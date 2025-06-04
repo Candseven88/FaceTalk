@@ -9,11 +9,11 @@ import { getUserGenerations } from '../../lib/firebase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import DiagnosticTool from '../components/DiagnosticTool';
 
-// 本地存储键名
+// Local storage keys
 const LOCAL_STORAGE_GENERATIONS_KEY = 'facetalk_generations';
 const LOCAL_STORAGE_USERNAME_KEY = 'facetalk_username';
 
-// 生成记录类型
+// Generation record type
 interface Generation {
   id: string;
   type: string;
@@ -23,10 +23,10 @@ interface Generation {
   name?: string;
   status?: string;
   userId?: string;
-  local?: boolean; // 标记是否是本地存储的生成记录
+  local?: boolean; // Mark if this is a locally stored generation
 }
 
-// 添加前端展示用的自定义User类型
+// Extended User type for frontend display
 interface ExtendedUser {
   uid: string;
   userId?: string;
@@ -46,28 +46,28 @@ export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // 加载用户名
+  // Load username
   useEffect(() => {
-    // 尝试从localStorage获取用户名
+    // Try to get username from localStorage
     const storedUsername = localStorage.getItem(LOCAL_STORAGE_USERNAME_KEY);
     if (storedUsername) {
       setUsername(storedUsername);
     } else {
-      // 没有存储的用户名，生成一个默认用户名
+      // No stored username, generate a default one
       const defaultName = user?.isAnonymous ? `Guest ${Math.floor(Math.random() * 1000)}` : 'User';
       setUsername(defaultName);
       localStorage.setItem(LOCAL_STORAGE_USERNAME_KEY, defaultName);
     }
   }, [user]);
   
-  // 重置错误状态
+  // Reset error state
   const resetErrors = () => {
     setLoadError(null);
     setRetryCount(prev => prev + 1);
     setIsLoadingGenerations(true);
   };
   
-  // 创建扩展的用户对象
+  // Create extended user object
   const extendedUser: ExtendedUser = {
     uid: user?.uid || '',
     name: username,
@@ -86,10 +86,10 @@ export default function Dashboard() {
     }
   }, [searchParams]);
   
-  // 加载生成历史
+  // Load generation history
   useEffect(() => {
     const loadGenerations = async () => {
-      // 如果正在加载认证状态，延迟加载生成记录
+      // If still loading auth state, delay loading generations
       if (authLoading) {
         return;
       }
@@ -98,7 +98,7 @@ export default function Dashboard() {
       setLoadError(null);
       
       try {
-        // 从localStorage获取生成历史
+        // Get generation history from localStorage
         const localGenerations: Generation[] = [];
         try {
           const localData = localStorage.getItem(LOCAL_STORAGE_GENERATIONS_KEY);
@@ -121,7 +121,7 @@ export default function Dashboard() {
           console.error('Error loading generations from localStorage:', error);
         }
         
-        // 如果有用户登录，尝试从Firebase获取生成历史
+        // If user is logged in, try to get generation history from Firebase
         let firebaseGenerations: Generation[] = [];
         if (user) {
           try {
@@ -151,23 +151,23 @@ export default function Dashboard() {
             console.error('Error fetching generations from Firebase:', error);
             // Continue with local generations if Firebase fails
             // But set error message to inform user
-            setLoadError('无法从云端加载数据，显示本地记录');
+            setLoadError('Unable to load cloud data. Showing local records only.');
           }
         }
         
-        // 合并本地和Firebase的生成历史，按时间排序
+        // Merge local and Firebase generation history, sort by time
         let allGenerations = [...localGenerations, ...firebaseGenerations];
         console.log('Combined generations:', allGenerations.length);
         
-        // 去重（可能有重复的记录，优先保留Firebase记录）
+        // Deduplicate (there might be duplicate records, prioritize Firebase records)
         const uniqueIds = new Set();
         allGenerations = allGenerations.filter(gen => {
-          // 如果是本地记录且没有ID，生成一个唯一ID
+          // If it's a local record with no ID, generate a unique ID
           if (gen.local && !gen.id) {
             gen.id = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
           
-          // 如果已经存在该ID，则忽略
+          // If this ID already exists, ignore
           if (uniqueIds.has(gen.id)) {
             return false;
           }
@@ -176,7 +176,7 @@ export default function Dashboard() {
           return true;
         });
         
-        // 按时间排序
+        // Sort by time
         allGenerations.sort((a, b) => {
           const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
           const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
@@ -188,26 +188,26 @@ export default function Dashboard() {
         console.error('Error loading generations:', error);
         // Set empty generations array to prevent infinite loading
         setGenerations([]);
-        setLoadError('加载数据时出错，请稍后再试');
+        setLoadError('Error loading data. Please try again later.');
       } finally {
         setIsLoadingGenerations(false);
       }
     };
     
-    // 只有当认证完成后才加载生成记录
+    // Only load generation records after auth is complete
     if (!authLoading) {
       loadGenerations();
     }
     
-    // 设置超时，确保加载状态不会无限持续
+    // Set timeout to ensure loading state doesn't continue indefinitely
     const timeoutId = setTimeout(() => {
       if (isLoadingGenerations) {
         console.log('Loading timeout reached, stopping loading state');
         setIsLoadingGenerations(false);
         
-        // 如果没有成功加载数据，显示错误消息
+        // If failed to load data successfully, show error message
         if (generations.length === 0) {
-          setLoadError('加载超时，请刷新页面重试');
+          setLoadError('Loading timed out. Please refresh the page to try again.');
         }
       }
     }, 15000);
@@ -226,7 +226,7 @@ export default function Dashboard() {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="正在加载认证信息..." />
+        <LoadingState type="spinner" message="Loading authentication..." />
       </div>
     );
   }
@@ -236,7 +236,7 @@ export default function Dashboard() {
     router.push('/get-started');
     return (
       <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="正在准备页面..." />
+        <LoadingState type="spinner" message="Preparing page..." />
       </div>
     );
   }
@@ -274,7 +274,7 @@ export default function Dashboard() {
     router.push(`/dashboard${params.toString() ? `?${params.toString()}` : ''}`);
   };
   
-  // 格式化日期
+  // Format date
   const formatDate = (timestamp: any): string => {
     try {
       const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -284,14 +284,14 @@ export default function Dashboard() {
     }
   };
   
-  // 打开生成结果
+  // Open generation result
   const viewGeneration = (generation: Generation) => {
     if (generation.result) {
       window.open(generation.result, '_blank');
     }
   };
   
-  // 下载生成结果
+  // Download generation result
   const downloadGeneration = (generation: Generation) => {
     if (generation.result) {
       const link = document.createElement('a');
@@ -303,11 +303,11 @@ export default function Dashboard() {
     }
   };
 
-  // 计算已使用的点数
+  // Calculate used points
   const usedPoints = userPlan?.usedPoints || 0;
-  // 计算总点数
+  // Calculate total points
   const totalPoints = (userPlan?.pointsLeft || 0) + usedPoints;
-  // 计算使用百分比
+  // Calculate usage percentage
   const usagePercent = totalPoints > 0 ? (usedPoints / totalPoints) * 100 : 0;
 
   return (
@@ -320,12 +320,12 @@ export default function Dashboard() {
             transition={{ duration: 0.5 }}
             className="text-center"
           >
-            <h1 className="text-3xl font-bold text-gray-900">欢迎回来, {extendedUser.name}!</h1>
-            <p className="text-gray-600 mt-2">用户ID: {extendedUser.uid}</p>
+            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {extendedUser.name}!</h1>
+            <p className="text-gray-600 mt-2">User ID: {extendedUser.uid}</p>
           </motion.div>
         </div>
 
-        {/* 错误信息显示 */}
+        {/* Error message display */}
         {loadError && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
             <span className="block sm:inline">{loadError}</span>
@@ -333,12 +333,12 @@ export default function Dashboard() {
               onClick={resetErrors}
               className="absolute top-0 bottom-0 right-0 px-4 py-3"
             >
-              <span className="text-blue-500 hover:text-blue-700">重试</span>
+              <span className="text-blue-500 hover:text-blue-700">Retry</span>
             </button>
           </div>
         )}
 
-        {/* 添加诊断工具 */}
+        {/* Add diagnostic tool */}
         <div className="mb-6">
           <DiagnosticTool />
         </div>
@@ -353,7 +353,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            概览
+            Overview
             {activeTab === 'overview' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -366,7 +366,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            生成历史
+            Generation History
             {activeTab === 'history' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -379,7 +379,7 @@ export default function Dashboard() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            账户设置
+            Account Settings
             {activeTab === 'settings' && (
               <span className="absolute -bottom-px left-0 w-full h-0.5 bg-facebook-blue animate-pulse"></span>
             )}
@@ -396,17 +396,17 @@ export default function Dashboard() {
             {/* Subscription Info & Credit Usage */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <motion.div variants={itemVariants}>
-                <Card title="当前订阅" subtitle="您的方案详情">
+                <Card title="Current Subscription" subtitle="Your plan details">
                   <div className="mt-2">
                     <div className="inline-block bg-blue-100 text-facebook-blue text-sm font-semibold px-2.5 py-0.5 rounded-full mb-2">
-                      {userPlan?.plan === 'free' ? '免费试用' : 
-                       userPlan?.plan === 'starter' ? '入门方案' : 
-                       userPlan?.plan === 'pro' ? '专业方案' : '免费试用'}
+                      {userPlan?.plan === 'free' ? 'Free Trial' : 
+                       userPlan?.plan === 'starter' ? 'Starter Plan' : 
+                       userPlan?.plan === 'pro' ? 'Pro Plan' : 'Free Trial'}
                     </div>
-                    <p className="text-sm text-gray-600">下次续费: <span className="font-medium text-gray-900">2025-06-30</span></p>
+                    <p className="text-sm text-gray-600">Next billing: <span className="font-medium text-gray-900">2025-06-30</span></p>
                     <div className="mt-4">
                       <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        管理订阅
+                        Manage Subscription
                       </button>
                     </div>
                   </div>
@@ -414,14 +414,14 @@ export default function Dashboard() {
               </motion.div>
 
               <motion.div variants={itemVariants} className="md:col-span-2">
-                <Card title="积分使用情况" subtitle="本月积分使用">
+                <Card title="Credits Usage" subtitle="This month's credit usage">
                   <div className="mt-4 space-y-4">
                     <div>
                       <div className="flex justify-between mb-1">
                         <span className="text-sm font-medium text-gray-700">
-                          已用积分: {usedPoints}/{totalPoints || 10}
+                          Credits used: {usedPoints}/{totalPoints || 10}
                         </span>
-                        <span className="text-sm font-medium text-facebook-blue">剩余 {userPlan?.pointsLeft || 10} 积分</span>
+                        <span className="text-sm font-medium text-facebook-blue">{userPlan?.pointsLeft || 10} remaining</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5">
                         <div 
@@ -432,11 +432,11 @@ export default function Dashboard() {
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
                       <div>
-                        <span className="block font-medium text-gray-900 mb-1">积分每月重置</span>
-                        <span>下次重置时间: 2025-06-30</span>
+                        <span className="block font-medium text-gray-900 mb-1">Credits reset monthly</span>
+                        <span>Next reset on 2025-06-30</span>
                       </div>
                       <button className="btn-primary text-sm px-3 py-1.5" onClick={() => router.push('/pricing')}>
-                        获取更多积分
+                        Get More Credits
                       </button>
                     </div>
                   </div>
