@@ -2,102 +2,129 @@
 
 import { useState, useEffect } from 'react';
 
-// 设备ID存储键
+// Device ID storage keys
 const DEVICE_ID_KEY = 'facetalk_device_id';
 const MACHINE_ID_KEY = 'facetalk_machine_id';
 
+// Default timeout for device ID generation (ms)
+const DEVICE_ID_GENERATION_TIMEOUT = 2000;
+
 /**
- * 生成简单的设备指纹，不依赖外部库
+ * Generate a simple device fingerprint, not dependent on external libraries
+ * Optimized to avoid blocking UI thread
  */
 const generateSimpleFingerprint = async (): Promise<string> => {
-  // 收集浏览器和设备信息
-  const info = {
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    platform: navigator.platform,
-    hardwareConcurrency: navigator.hardwareConcurrency || 0,
-    screenWidth: window.screen.width,
-    screenHeight: window.screen.height,
-    screenDepth: window.screen.colorDepth,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    deviceMemory: (navigator as any).deviceMemory || 0,
-    doNotTrack: navigator.doNotTrack,
-    cookieEnabled: navigator.cookieEnabled,
-    localStorage: typeof localStorage !== 'undefined',
-  };
-
-  // 转换为字符串并使用简单哈希
-  const infoStr = JSON.stringify(info);
-  let hash = 0;
-  for (let i = 0; i < infoStr.length; i++) {
-    const char = infoStr.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // 转换为32位整数
+  // Check for existing fingerprint first for immediate response
+  const storedDeviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (storedDeviceId) {
+    return storedDeviceId;
   }
 
-  // 添加时间戳作为随机因子
-  const randomSeed = Date.now().toString(36);
+  // Basic device info that can be quickly accessed
+  const quickInfo = {
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    screenSize: `${window.screen.width}x${window.screen.height}`,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
   
-  // 生成指纹
-  return `FT-${Math.abs(hash).toString(16)}-${randomSeed}`;
+  // Generate a quick fingerprint for immediate use
+  const quickFingerprintStr = JSON.stringify(quickInfo);
+  let quickHash = 0;
+  for (let i = 0; i < quickFingerprintStr.length; i++) {
+    const char = quickFingerprintStr.charCodeAt(i);
+    quickHash = ((quickHash << 5) - quickHash) + char;
+    quickHash = quickHash & quickHash;
+  }
+  
+  // Add random factor for uniqueness
+  const randomSeed = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+  const quickFingerprint = `FT-${Math.abs(quickHash).toString(16)}-${randomSeed}`;
+  
+  // Save quick fingerprint immediately
+  localStorage.setItem(DEVICE_ID_KEY, quickFingerprint);
+  
+  // Create a promise for the more complete fingerprint
+  const detailedFingerprintPromise = new Promise<string>((resolve) => {
+    // Use requestIdleCallback or setTimeout to avoid blocking UI
+    const runDetailed = () => {
+      try {
+        // Collect full browser and device information
+        const detailedInfo = {
+          ...quickInfo,
+          platform: navigator.platform,
+          hardwareConcurrency: navigator.hardwareConcurrency || 0,
+          screenDepth: window.screen.colorDepth,
+          deviceMemory: (navigator as any).deviceMemory || 0,
+          doNotTrack: navigator.doNotTrack,
+          cookieEnabled: navigator.cookieEnabled,
+          localStorage: typeof localStorage !== 'undefined',
+        };
+
+        // Generate detailed fingerprint
+        const infoStr = JSON.stringify(detailedInfo);
+        let hash = 0;
+        for (let i = 0; i < infoStr.length; i++) {
+          const char = infoStr.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash; // Convert to 32-bit integer
+        }
+        
+        // Build final fingerprint
+        const detailedFingerprint = `FT-${Math.abs(hash).toString(16)}-${randomSeed}`;
+        
+        // Update stored fingerprint if different
+        if (detailedFingerprint !== quickFingerprint) {
+          localStorage.setItem(DEVICE_ID_KEY, detailedFingerprint);
+        }
+        
+        resolve(detailedFingerprint);
+      } catch (error) {
+        console.error('Error in detailed fingerprint generation:', error);
+        resolve(quickFingerprint); // Fall back to quick fingerprint
+      }
+    };
+    
+    // Use requestIdleCallback if available, otherwise setTimeout
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => runDetailed());
+    } else {
+      setTimeout(runDetailed, 50); // Small delay to let UI render first
+    }
+  });
+  
+  // Create a timeout promise
+  const timeoutPromise = new Promise<string>(resolve => {
+    setTimeout(() => resolve(quickFingerprint), DEVICE_ID_GENERATION_TIMEOUT);
+  });
+  
+  // Race between detailed fingerprint and timeout
+  return Promise.race([detailedFingerprintPromise, timeoutPromise]);
 };
 
 /**
- * 获取设备唯一ID的Hook
- * 使用简单浏览器指纹和本地存储，提供设备识别
+ * Get device ID hook
+ * Uses simple browser fingerprinting and local storage for device identification
+ * Optimized for immediate UI response
  */
 export const useDeviceId = () => {
-  const [deviceId, setDeviceId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [deviceId, setDeviceId] = useState<string | null>(
+    // Initialize with stored ID if available for immediate UI response
+    typeof localStorage !== 'undefined' ? localStorage.getItem(DEVICE_ID_KEY) : null
+  );
+  const [isLoading, setIsLoading] = useState(deviceId === null);
 
   useEffect(() => {
+    // Only run generation if no ID already set
+    if (deviceId !== null) return;
+    
     const generateDeviceId = async () => {
       try {
-        // 先检查localStorage是否已存在设备ID
-        const storedDeviceId = localStorage.getItem(DEVICE_ID_KEY);
-        const storedMachineId = localStorage.getItem(MACHINE_ID_KEY);
-        
-        if (storedDeviceId && storedMachineId) {
-          setDeviceId(storedDeviceId);
-          setIsLoading(false);
-          return;
-        }
-
-        // 创建新的设备指纹
-        const visitorId = await generateSimpleFingerprint();
-        
-        // 收集额外硬件信息增强指纹识别
-        const hardwareInfo = {
-          platform: navigator.platform,
-          userAgent: navigator.userAgent,
-          cpuCores: navigator.hardwareConcurrency || 0,
-          deviceMemory: (navigator as any).deviceMemory || 0,
-          screenResolution: `${window.screen.width}x${window.screen.height}`,
-          colorDepth: window.screen.colorDepth,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          language: navigator.language
-        };
-        
-        // 组合生成机器ID
-        const machineIdComponents = [
-          hardwareInfo.platform,
-          hardwareInfo.cpuCores,
-          hardwareInfo.deviceMemory,
-          hardwareInfo.screenResolution,
-          hardwareInfo.timezone
-        ].join('|');
-        
-        // 生成最终设备ID
-        const finalDeviceId = `${visitorId}_${btoa(machineIdComponents).substring(0, 10)}`;
-        
-        // 存储设备ID
-        localStorage.setItem(DEVICE_ID_KEY, finalDeviceId);
-        localStorage.setItem(MACHINE_ID_KEY, machineIdComponents);
-        
-        setDeviceId(finalDeviceId);
+        const generatedId = await generateSimpleFingerprint();
+        setDeviceId(generatedId);
       } catch (error) {
         console.error('Error generating device fingerprint:', error);
-        // 回退到随机ID
+        // Fall back to random ID
         const fallbackId = 'device_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
         localStorage.setItem(DEVICE_ID_KEY, fallbackId);
         setDeviceId(fallbackId);
@@ -107,57 +134,15 @@ export const useDeviceId = () => {
     };
 
     generateDeviceId();
-  }, []);
+  }, [deviceId]);
 
   return { deviceId, isLoading };
 };
 
 /**
- * 获取设备唯一ID的工具函数（非Hook版本）
+ * Get device ID utility function (non-Hook version)
+ * Returns immediately with stored ID if available, or generates a new one
  */
 export const getDeviceId = async (): Promise<string> => {
-  // 先检查localStorage是否已存在设备ID
-  const storedDeviceId = localStorage.getItem(DEVICE_ID_KEY);
-  if (storedDeviceId) {
-    return storedDeviceId;
-  }
-
-  // 创建新的设备指纹
-  try {
-    const visitorId = await generateSimpleFingerprint();
-    
-    // 收集额外硬件信息
-    const hardwareInfo = {
-      platform: navigator.platform,
-      userAgent: navigator.userAgent,
-      cpuCores: navigator.hardwareConcurrency || 0,
-      deviceMemory: (navigator as any).deviceMemory || 0,
-      screenResolution: `${window.screen.width}x${window.screen.height}`,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    };
-    
-    // 组合生成机器ID
-    const machineIdComponents = [
-      hardwareInfo.platform,
-      hardwareInfo.cpuCores,
-      hardwareInfo.deviceMemory,
-      hardwareInfo.screenResolution,
-      hardwareInfo.timezone
-    ].join('|');
-    
-    // 生成最终设备ID
-    const finalDeviceId = `${visitorId}_${btoa(machineIdComponents).substring(0, 10)}`;
-    
-    // 存储设备ID和机器ID
-    localStorage.setItem(DEVICE_ID_KEY, finalDeviceId);
-    localStorage.setItem(MACHINE_ID_KEY, machineIdComponents);
-    
-    return finalDeviceId;
-  } catch (error) {
-    console.error('Error generating device fingerprint:', error);
-    // 回退到随机ID
-    const fallbackId = 'device_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem(DEVICE_ID_KEY, fallbackId);
-    return fallbackId;
-  }
+  return generateSimpleFingerprint();
 }; 

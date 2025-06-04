@@ -43,8 +43,28 @@ export default function Dashboard() {
   const [username, setUsername] = useState<string>('User');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [pageLoading, setPageLoading] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Force loading state to false after timeout
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pageLoading) {
+        console.log('Dashboard still loading after timeout, forcing render');
+        setPageLoading(false);
+      }
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [pageLoading]);
+  
+  // Update page loading state when auth state changes
+  useEffect(() => {
+    if (!authLoading) {
+      setPageLoading(false);
+    }
+  }, [authLoading]);
   
   // Load username
   useEffect(() => {
@@ -88,33 +108,35 @@ export default function Dashboard() {
   
   // Load generation history
   useEffect(() => {
+    // Skip if page is still loading auth
+    if (authLoading && !user) return;
+    
     const loadGenerations = async () => {
-      // If still loading auth state, delay loading generations
-      if (authLoading) {
-        return;
-      }
-      
       setIsLoadingGenerations(true);
       setLoadError(null);
       
       try {
-        // Get generation history from localStorage
-        const localGenerations: Generation[] = [];
+        // First load any locally cached generations for immediate UI response
+        let localGenerations: Generation[] = [];
         try {
           const localData = localStorage.getItem(LOCAL_STORAGE_GENERATIONS_KEY);
           if (localData) {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed)) {
-              parsed.forEach((item: any) => {
-                if (item && item.type && item.result && item.timestamp) {
-                  localGenerations.push({
-                    ...item,
-                    local: true,
-                    name: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} Generation`,
-                    status: 'completed'
-                  });
-                }
-              });
+              localGenerations = parsed.filter(item => 
+                item && item.type && item.result && item.timestamp
+              ).map(item => ({
+                ...item,
+                local: true,
+                name: `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} Generation`,
+                status: 'completed'
+              }));
+              
+              // Show local generations immediately
+              if (localGenerations.length > 0) {
+                setGenerations(localGenerations);
+                setIsLoadingGenerations(false);
+              }
             }
           }
         } catch (error) {
@@ -128,7 +150,7 @@ export default function Dashboard() {
             console.log('Fetching generations from Firebase for user:', user.uid);
             // Add a timeout to prevent hanging forever if Firebase doesn't respond
             const timeoutPromise = new Promise<[]>((_, reject) => {
-              setTimeout(() => reject(new Error('Firebase request timeout')), 8000);
+              setTimeout(() => reject(new Error('Firebase request timeout')), 5000);
             });
             
             // Wrap the Firebase call in try-catch for more granular error handling
@@ -147,57 +169,50 @@ export default function Dashboard() {
               name: `${gen.type.charAt(0).toUpperCase() + gen.type.slice(1)} Generation`,
               status: 'completed'
             }));
+            
+            // Merge and update with Firebase data
+            let allGenerations = [...localGenerations, ...firebaseGenerations];
+            
+            // Deduplicate
+            const uniqueIds = new Set();
+            allGenerations = allGenerations.filter(gen => {
+              if (gen.local && !gen.id) {
+                gen.id = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              }
+              
+              if (uniqueIds.has(gen.id)) {
+                return false;
+              }
+              
+              uniqueIds.add(gen.id);
+              return true;
+            });
+            
+            // Sort by time
+            allGenerations.sort((a, b) => {
+              const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+              const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+              return dateB.getTime() - dateA.getTime();
+            });
+            
+            setGenerations(allGenerations);
           } catch (error) {
             console.error('Error fetching generations from Firebase:', error);
-            // Continue with local generations if Firebase fails
-            // But set error message to inform user
-            setLoadError('Unable to load cloud data. Showing local records only.');
+            // Only show error if we don't have local generations
+            if (localGenerations.length === 0) {
+              setLoadError('Unable to load cloud data. Showing local records only.');
+            }
           }
         }
-        
-        // Merge local and Firebase generation history, sort by time
-        let allGenerations = [...localGenerations, ...firebaseGenerations];
-        console.log('Combined generations:', allGenerations.length);
-        
-        // Deduplicate (there might be duplicate records, prioritize Firebase records)
-        const uniqueIds = new Set();
-        allGenerations = allGenerations.filter(gen => {
-          // If it's a local record with no ID, generate a unique ID
-          if (gen.local && !gen.id) {
-            gen.id = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          }
-          
-          // If this ID already exists, ignore
-          if (uniqueIds.has(gen.id)) {
-            return false;
-          }
-          
-          uniqueIds.add(gen.id);
-          return true;
-        });
-        
-        // Sort by time
-        allGenerations.sort((a, b) => {
-          const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-          const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-          return dateB.getTime() - dateA.getTime();
-        });
-        
-        setGenerations(allGenerations);
       } catch (error) {
         console.error('Error loading generations:', error);
-        // Set empty generations array to prevent infinite loading
-        setGenerations([]);
         setLoadError('Error loading data. Please try again later.');
       } finally {
         setIsLoadingGenerations(false);
       }
     };
     
-    // Only load generation records after auth is complete
-    if (!authLoading) {
-      loadGenerations();
-    }
+    loadGenerations();
     
     // Set timeout to ensure loading state doesn't continue indefinitely
     const timeoutId = setTimeout(() => {
@@ -210,37 +225,37 @@ export default function Dashboard() {
           setLoadError('Loading timed out. Please refresh the page to try again.');
         }
       }
-    }, 15000);
+    }, 8000);
     
     return () => clearTimeout(timeoutId);
   }, [user, authLoading, retryCount]);
   
-  // Redirect if not authenticated
+  // Redirect if not authenticated after auth loading finishes
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/get-started');
     }
   }, [user, authLoading, router]);
 
-  // If still loading auth, show loading state
-  if (authLoading) {
+  // If still loading, show loading state
+  if ((authLoading || pageLoading) && !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="Loading authentication..." />
+        <LoadingState type="spinner" message="Loading dashboard..." />
       </div>
     );
   }
-
+  
   // If not authenticated, redirect to get-started
   if (!user) {
     router.push('/get-started');
     return (
       <div className="flex items-center justify-center min-h-screen bg-subtle-bg">
-        <LoadingState type="spinner" message="Preparing page..." />
+        <LoadingState type="spinner" message="Redirecting..." />
       </div>
     );
   }
-  
+
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },

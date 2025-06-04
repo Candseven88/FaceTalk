@@ -50,6 +50,25 @@ export default function PricingPage() {
     };
   }, [authSuccessRedirectTimer]);
 
+  // Add a useEffect to initialize local state immediately
+  useEffect(() => {
+    // Force loading state to false after a timeout to prevent indefinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (authLoading && !user) {
+        console.log('Auth still loading after timeout, showing page anyway');
+        // Use local state for immediate UI response
+        const localState = {
+          currentPlan: 'free',
+          isSubscribed: false
+        };
+        // Display page content even if auth is still loading
+        // This will be updated when auth actually loads
+      }
+    }, 3000);
+
+    return () => clearTimeout(loadingTimeout);
+  }, []);
+
   // Handle subscription button click
   const handleSubscribeClick = (plan: 'basic' | 'pro') => {
     setSelectedPlan(plan);
@@ -115,7 +134,7 @@ export default function PricingPage() {
   };
   
   // If user is currently being authenticated, show loading state
-  if (authLoading) {
+  if (authLoading && !user) {
     return (
       <div className="pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg min-h-screen">
         <div className="max-w-7xl mx-auto">
