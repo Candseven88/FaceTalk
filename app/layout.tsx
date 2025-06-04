@@ -47,6 +47,19 @@ export default function RootLayout({
           })();
           `}
         </Script>
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-XQNFKB77RS"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-XQNFKB77RS');
+          `}
+        </Script>
         {/* TikTok Pixel - Client Side Component */}
         <TikTokPixel pixelId={process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || ''} />
         <AuthProvider>
