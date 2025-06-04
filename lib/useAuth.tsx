@@ -161,21 +161,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } else {
           console.log('No current user and no stored UID, signing in anonymously');
           // 创建新的匿名用户
-          const result = await signInAnonymously();
-          console.log("Anonymous user created successfully", result.user?.uid);
-          
-          // 存储用户ID到localStorage
-          if (result.user) {
-            localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
-            console.log("User ID saved to localStorage:", result.user.uid);
+          try {
+            const result = await signInAnonymously();
+            // Use the result directly since it now has the correct type
+            console.log("Anonymous user created successfully", result.user?.uid);
             
-            // Update auth state in localStorage
-            localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
-              isLoggedIn: true,
-              uid: result.user.uid,
-              isAnonymous: true,
-              lastUpdated: new Date().toISOString()
-            }));
+            // 存储用户ID到localStorage
+            if (result.user && result.user.uid) {
+              localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
+              console.log("User ID saved to localStorage:", result.user.uid);
+              
+              // Update auth state in localStorage
+              localStorage.setItem(LOCAL_STORAGE_AUTH_STATE, JSON.stringify({
+                isLoggedIn: true,
+                uid: result.user.uid,
+                isAnonymous: true,
+                lastUpdated: new Date().toISOString()
+              }));
+            }
+          } catch (signInError) {
+            console.error("Error during anonymous sign in:", signInError);
+            // Handle sign-in error
           }
         }
         
@@ -189,7 +195,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setTimeout(async () => {
           try {
             const result = await signInAnonymously();
-            if (result.user) {
+            // Use the result directly since it now has the correct type
+            if (result.user && result.user.uid) {
               localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
               console.log("Retry: Anonymous user created successfully", result.user.uid);
               
@@ -335,8 +342,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // 最好的方法是创建一个新的匿名用户
           try {
             const result = await signInAnonymously();
+            // Use the result directly since it now has the correct type
             console.log("Created new anonymous user:", result.user?.uid);
-            if (result.user) {
+            if (result.user && result.user.uid) {
               localStorage.setItem(LOCAL_STORAGE_UID_KEY, result.user.uid);
               
               // Update auth state in localStorage

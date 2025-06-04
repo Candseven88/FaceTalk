@@ -522,11 +522,20 @@ export const checkDeviceCreditsUsage = async (deviceId: string): Promise<boolean
 
 // Auth helpers with improved resilience
 export const onAuthStateChanged = firebaseOnAuthStateChanged;
-export const signInAnonymously = () => {
+
+// Define a proper return type interface for signInAnonymously
+interface AuthResult {
+  user?: {
+    uid?: string;
+    isAnonymous?: boolean;
+  };
+}
+
+export const signInAnonymously = (): Promise<AuthResult> => {
   console.log('Attempting anonymous sign in');
   
   // Create a timeout promise
-  const timeoutPromise = new Promise((_, reject) => {
+  const timeoutPromise = new Promise<AuthResult>((_, reject) => {
     setTimeout(() => reject(new Error('Auth operation timeout')), FIREBASE_OPERATION_TIMEOUT);
   });
   
@@ -534,7 +543,7 @@ export const signInAnonymously = () => {
   const authPromise = firebaseSignInAnonymously(auth)
     .then(result => {
       console.log('Anonymous sign in successful, UID:', result.user?.uid);
-      return result;
+      return result as AuthResult;
     })
     .catch(error => {
       console.error('Anonymous sign in failed:', error);
