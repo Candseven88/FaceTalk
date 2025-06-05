@@ -373,15 +373,6 @@ export default function TalkingPortrait() {
     <div className="bg-white rounded-lg shadow p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Talking Portrait</h2>
       
-      {/* How to use guide */}
-      <HowToUse
-        title="How to Use Talking Portrait"
-        steps={howToUseSteps}
-        mediaType="gif"
-        mediaPath="/guides/talking-portrait-guide.gif"
-        mediaAlt="Talking Portrait example"
-      />
-      
       {/* Points Cost Info */}
       {error ? (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
@@ -397,6 +388,50 @@ export default function TalkingPortrait() {
           </p>
         </div>
       )}
+      
+      {/* Premium Feature Badge */}
+      <div className="mb-6 p-3 bg-gradient-to-r from-purple-100 to-indigo-100 rounded-lg border border-purple-200 flex items-center">
+        <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold mr-3">PREMIUM</span>
+        <p className="text-sm text-purple-800">
+          Our highest quality animation feature - perfect for special occasions and professional content.
+        </p>
+      </div>
+      
+      {/* Emotional Value & Processing Time Expectations */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+          <h3 className="text-lg font-semibold text-purple-700 mb-2">Create Personalized Messages</h3>
+          <p className="text-sm text-gray-700">
+            Make portraits speak exactly what you want in your own voice. Perfect for virtual greetings, memorials, or humorous messages from colleagues.
+          </p>
+        </div>
+        
+        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+          <h3 className="text-lg font-semibold text-indigo-700 mb-2">Processing Time: 10-15 minutes</h3>
+          <p className="text-sm text-gray-700">
+            This advanced feature typically takes 10-15 minutes to complete. Your results will be saved for 24 hours in the Tasks section.
+          </p>
+        </div>
+      </div>
+      
+      {/* How to Use Guide - ALWAYS VISIBLE */}
+      <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3">How to Use Talking Portrait</h3>
+        
+        <ol className="list-decimal pl-5 space-y-2 text-gray-700 mb-4">
+          {howToUseSteps.map((step, index) => (
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+        
+        <div className="mt-4 flex justify-center">
+          <img 
+            src="/guides/talking-portrait-guide.gif" 
+            alt="Talking Portrait example" 
+            className="max-w-full h-auto rounded-lg shadow-sm max-h-64" 
+          />
+        </div>
+      </div>
       
       {/* Input Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -458,10 +493,13 @@ export default function TalkingPortrait() {
           </div>
         </div>
       </div>
-
+      
       {/* Advanced Settings */}
       <div className="mb-6 bg-gray-50 p-4 rounded-lg">
-        <h3 className="text-lg font-medium mb-3">Advanced Settings</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-medium">Advanced Settings</h3>
+          <span className="text-xs text-gray-500">(For best results, default values are recommended)</span>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -543,7 +581,7 @@ export default function TalkingPortrait() {
         <button
           onClick={handleGenerate}
           disabled={!portraitFile || !audioFile || isProcessing || isDeducting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-lg"
         >
           {isProcessing ? 'Processing...' : isDeducting ? 'Checking points...' : 'Generate Talking Portrait'}
         </button>
@@ -556,14 +594,12 @@ export default function TalkingPortrait() {
           Reset
         </button>
         
-        {videoResult && (
-          <button
-            onClick={handleViewHistory}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            View History
-          </button>
-        )}
+        <Link
+          href="/tasks"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        >
+          View Tasks
+        </Link>
       </div>
 
       {/* Progress Display */}
@@ -575,17 +611,22 @@ export default function TalkingPortrait() {
               style={{ width: isProcessing ? '100%' : '0%' }}
             ></div>
           </div>
-          <div className="mt-2">
+          <div className="flex justify-between items-center mt-2">
             <p className="text-sm text-gray-600">{progress}</p>
-            {isProcessing && progress.includes('take 10-15 minutes') && (
-              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-xs text-blue-700">
-                  <strong>Note:</strong> The Talking Portrait model takes 10-15 minutes to process. You can keep this tab open 
-                  or check back later - your request will continue processing on our servers.
-                </p>
-              </div>
+            {isProcessing && (
+              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">
+                You can check progress later in Tasks
+              </Link>
             )}
           </div>
+          
+          {isProcessing && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                <strong>Please note:</strong> This premium feature takes 10-15 minutes to process. You can keep this tab open or check back later in the Tasks section - your request will continue processing on our servers and your result will be saved automatically.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

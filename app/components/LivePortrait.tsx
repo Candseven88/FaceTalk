@@ -355,15 +355,6 @@ export default function LivePortrait() {
     <div className="bg-white rounded-lg shadow p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Live Portrait Animation</h2>
       
-      {/* How to use guide */}
-      <HowToUse
-        title="How to Use Live Portrait Animation"
-        steps={howToUseSteps}
-        mediaType="gif"
-        mediaPath="/guides/live-portrait-guide.gif"
-        mediaAlt="Live Portrait Animation example"
-      />
-      
       {/* Points Cost Info */}
       <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-md">
         <p className="text-sm text-blue-800">
@@ -371,6 +362,42 @@ export default function LivePortrait() {
         </p>
       </div>
       
+      {/* Emotional Value & Processing Time Expectations */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+          <h3 className="text-lg font-semibold text-purple-700 mb-2">Create Meaningful Memories</h3>
+          <p className="text-sm text-gray-700">
+            Bring your family photos to life with realistic movements and expressions. Preserve memories of loved ones in a uniquely interactive way.
+          </p>
+        </div>
+        
+        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+          <h3 className="text-lg font-semibold text-indigo-700 mb-2">Processing Time: 3-10 minutes</h3>
+          <p className="text-sm text-gray-700">
+            Generation typically takes 3-10 minutes to complete. You can wait or come back later - your results will be saved for 24 hours in the Tasks section.
+          </p>
+        </div>
+      </div>
+      
+      {/* How to Use Guide - ALWAYS VISIBLE */}
+      <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3">How to Use Live Portrait Animation</h3>
+        
+        <ol className="list-decimal pl-5 space-y-2 text-gray-700 mb-4">
+          {howToUseSteps.map((step, index) => (
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+        
+        <div className="mt-4 flex justify-center">
+          <img 
+            src="/guides/live-portrait-guide.gif" 
+            alt="Live Portrait Animation example" 
+            className="max-w-full h-auto rounded-lg shadow-sm max-h-64" 
+          />
+        </div>
+      </div>
+
       {/* Input Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Portrait Image Upload */}
@@ -437,7 +464,7 @@ export default function LivePortrait() {
         <button
           onClick={handleGenerate}
           disabled={!portraitFile || !drivingFile || isProcessing || isDeducting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-lg"
         >
           {isProcessing ? 'Processing...' : isDeducting ? 'Checking points...' : 'Generate Animation'}
         </button>
@@ -472,6 +499,14 @@ export default function LivePortrait() {
               </Link>
             )}
           </div>
+          
+          {isProcessing && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                <strong>Please note:</strong> Generation typically takes 3-10 minutes to complete. You can wait here or close this page and check the Tasks section later. Your result will be saved automatically.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

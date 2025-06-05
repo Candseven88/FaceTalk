@@ -121,9 +121,28 @@ export default function Home() {
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
                 Bring Your Portrait to Life with <span className="text-facebook-blue">AI</span>
               </h1>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-4">
                 Transform static images into dynamic, talking avatars with our cutting-edge AI technology. Create realistic animations in minutes, not hours.
               </p>
+              <div className="flex flex-wrap justify-center gap-4 mt-6 mb-8">
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 max-w-xs">
+                  <span className="text-blue-600 font-semibold">Preserve Precious Memories</span>
+                  <p className="text-sm text-gray-600">Bring photos of loved ones to life with authentic expressions and voice.</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 max-w-xs">
+                  <span className="text-purple-600 font-semibold">Create Fun Content</span>
+                  <p className="text-sm text-gray-600">Make entertaining videos with friends, family or colleagues for social sharing.</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-center gap-4 mt-6 mb-6">
+                <a href="#choose-tool" className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 animate-pulse">
+                  Try It Now
+                </a>
+                <a href="#demo" className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-all duration-300">
+                  See Examples
+                </a>
+              </div>
             </div>
             
             <div className={`flex justify-center transition-all duration-1000 delay-300 transform ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
@@ -164,7 +183,7 @@ export default function Home() {
       </div>
 
       {/* Tab Navigation - AI Tool Selection */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg">
+      <section id="choose-tool" className="py-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Choose Your AI Tool</h2>

@@ -7,6 +7,7 @@ import { useProgressTracking } from '../../lib/useProgressTracking';
 import { useRouter } from 'next/navigation';
 import HowToUse from './HowToUse';
 import { saveGeneration, updateUsageStats } from '../../lib/firebase';
+import Link from 'next/link';
 
 // 本地存储键名
 const LOCAL_STORAGE_VOICE_GENERATION_KEY = 'facetalk_last_voice_generation';
@@ -323,20 +324,47 @@ export default function VoiceCloning() {
     <div className="bg-white rounded-lg shadow p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">Voice Cloning</h2>
       
-      {/* How to use guide */}
-      <HowToUse
-        title="How to Use Voice Cloning"
-        steps={howToUseSteps}
-        mediaType="audio"
-        mediaPath="/guides/voice-cloning-example.mp3"
-        mediaAlt="Voice Cloning example"
-      />
-      
       {/* Points Cost Info */}
       <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-md">
         <p className="text-sm text-blue-800">
           This feature costs <span className="font-bold">{featureCost} point</span> per use.
         </p>
+      </div>
+      
+      {/* Emotional Value & Processing Time Expectations */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-100">
+          <h3 className="text-lg font-semibold text-purple-700 mb-2">Preserve Familiar Voices</h3>
+          <p className="text-sm text-gray-700">
+            Clone voices of loved ones and create new audio content. Perfect for preserving memories or creating personalized messages.
+          </p>
+        </div>
+        
+        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+          <h3 className="text-lg font-semibold text-indigo-700 mb-2">Processing Time: 2-5 minutes</h3>
+          <p className="text-sm text-gray-700">
+            Voice generation typically takes 2-5 minutes to complete. Your results will be saved for 24 hours in the Tasks section.
+          </p>
+        </div>
+      </div>
+      
+      {/* How to Use Guide - ALWAYS VISIBLE */}
+      <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3">How to Use Voice Cloning</h3>
+        
+        <ol className="list-decimal pl-5 space-y-2 text-gray-700 mb-4">
+          {howToUseSteps.map((step, index) => (
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+        
+        <div className="mt-4 flex justify-center">
+          <audio 
+            src="/guides/voice-cloning-example.mp3" 
+            controls 
+            className="w-full max-w-md" 
+          />
+        </div>
       </div>
       
       {/* Input Section */}
@@ -423,7 +451,7 @@ export default function VoiceCloning() {
         <button
           onClick={handleGenerate}
           disabled={!voiceSampleFile || !text || isProcessing || isDeducting}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-lg"
         >
           {isProcessing ? 'Processing...' : isDeducting ? 'Checking points...' : 'Generate Voice Clone'}
         </button>
@@ -436,14 +464,12 @@ export default function VoiceCloning() {
           Reset
         </button>
         
-        {audioResult && (
-          <button
-            onClick={handleViewHistory}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            View History
-          </button>
-        )}
+        <Link
+          href="/tasks"
+          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+        >
+          View Tasks
+        </Link>
       </div>
 
       {/* Progress Display */}
@@ -452,7 +478,22 @@ export default function VoiceCloning() {
           <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
             <div className="h-full bg-blue-600 animate-pulse" style={{ width: isProcessing ? '100%' : '0%' }}></div>
           </div>
-          <p className="text-sm text-gray-600 mt-2">{progress}</p>
+          <div className="flex justify-between items-center mt-2">
+            <p className="text-sm text-gray-600">{progress}</p>
+            {isProcessing && (
+              <Link href="/tasks" className="text-xs text-blue-600 hover:underline">
+                You can check progress later in Tasks
+              </Link>
+            )}
+          </div>
+          
+          {isProcessing && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-sm text-yellow-800">
+                <strong>Please note:</strong> Voice generation typically takes 2-5 minutes to complete. You can wait here or close this page and check the Tasks section later. Your result will be saved automatically.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
