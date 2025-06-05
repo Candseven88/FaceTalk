@@ -68,6 +68,27 @@ export default function RootLayout({
           <main className="flex-grow pt-16">{children}</main>
           <Footer />
         </AuthProvider>
+        
+        {/* Fix credits issue */}
+        <Script id="fix-credits" strategy="beforeInteractive">
+          {`
+            if (typeof window !== 'undefined') {
+              try {
+                console.log('Checking and resetting facetalk_points');
+                const currentPoints = localStorage.getItem('facetalk_points');
+                if (currentPoints === '96' || currentPoints === '100') {
+                  console.log('Resetting credits from', currentPoints, 'to 4');
+                  localStorage.setItem('facetalk_points', '4');
+                  
+                  // Force reload the page to apply new credits
+                  window.location.reload();
+                }
+              } catch (e) {
+                console.error('Error fixing credits:', e);
+              }
+            }
+          `}
+        </Script>
       </body>
     </html>
   );

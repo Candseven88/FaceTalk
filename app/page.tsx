@@ -158,7 +158,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Demo Section */}
+      {/* Environment Checker (only for development) */}
+      <div className="hidden">
+        <EnvChecker />
+      </div>
+
+      {/* Demo Section - MOVED ABOVE TAB NAVIGATION */}
       <section id="demo" className="py-16 px-4 sm:px-6 lg:px-8 bg-white/80">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
@@ -181,11 +186,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* Environment Checker (only for development) */}
-      <div className="hidden">
-        <EnvChecker />
-      </div>
 
       {/* Tab Navigation */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg">

@@ -54,10 +54,38 @@ export const useProgressTracking = () => {
     
     loadTasks();
     
-    // Set up polling to check active task progress every 5 seconds
+    // Set up polling to check active task progress every 3 seconds (reduced from 5)
     const intervalId = setInterval(() => {
       loadTasks();
-    }, 5000);
+      
+      // Explicitly check for individual task updates
+      try {
+        const tasksJson = localStorage.getItem(TASK_STORAGE_KEY);
+        if (tasksJson) {
+          const tasks = JSON.parse(tasksJson) as ProgressTask[];
+          
+          // For each task, check if there's an individual update
+          tasks.forEach(task => {
+            const taskKey = `${PROGRESS_STORAGE_KEY_PREFIX}${task.id}`;
+            const individualTaskJson = localStorage.getItem(taskKey);
+            
+            if (individualTaskJson) {
+              try {
+                const updatedTask = JSON.parse(individualTaskJson) as ProgressTask;
+                if (updatedTask.lastUpdated !== task.lastUpdated) {
+                  // Task has been updated elsewhere, trigger a full reload
+                  loadTasks();
+                }
+              } catch (e) {
+                console.error('Error parsing individual task data:', e);
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Error checking for task updates:', e);
+      }
+    }, 3000);
     
     return () => clearInterval(intervalId);
   }, []);
@@ -124,6 +152,7 @@ export const useProgressTracking = () => {
 
   // Complete a task
   const completeTask = (id: string, output: string) => {
+    console.log(`Marking task ${id} as completed with output:`, output);
     const now = new Date().toISOString();
     
     setActiveTasks(prev => {
@@ -150,6 +179,41 @@ export const useProgressTracking = () => {
       
       return updatedTasks;
     });
+    
+    // Double-check to ensure the task is saved as completed
+    setTimeout(() => {
+      const taskJson = localStorage.getItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`);
+      if (taskJson) {
+        try {
+          const task = JSON.parse(taskJson) as ProgressTask;
+          if (task.status !== 'completed') {
+            // Force update the task to completed state if not saved properly
+            const updatedTask: ProgressTask = {
+              ...task,
+              status: 'completed',
+              progress: 'Completed',
+              output,
+              lastUpdated: now
+            };
+            
+            localStorage.setItem(`${PROGRESS_STORAGE_KEY_PREFIX}${id}`, JSON.stringify(updatedTask));
+            
+            // Also update the task list
+            const tasksJson = localStorage.getItem(TASK_STORAGE_KEY);
+            if (tasksJson) {
+              const tasks = JSON.parse(tasksJson) as ProgressTask[];
+              const updatedTasks = tasks.map(t => t.id === id ? updatedTask : t);
+              localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(updatedTasks));
+              
+              // Update state
+              setActiveTasks(updatedTasks);
+            }
+          }
+        } catch (e) {
+          console.error('Error checking task completion status:', e);
+        }
+      }
+    }, 500);
   };
 
   // Mark a task as failed
