@@ -163,31 +163,7 @@ export default function Home() {
         <EnvChecker />
       </div>
 
-      {/* Demo Section - MOVED ABOVE TAB NAVIGATION */}
-      <section id="demo" className="py-16 px-4 sm:px-6 lg:px-8 bg-white/80">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">See FaceTalk in Action</h2>
-            <p className="text-lg text-gray-600">Experience the magic of AI-powered avatar generation</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            {features.map((feature, index) => (
-              <div 
-                key={feature.id} 
-                className="feature-card shadow-card hover:shadow-card-hover animate-fade-in"
-                style={{ animationDelay: `${index * 200}ms` }}
-              >
-                <div className="mb-4 text-facebook-blue">{feature.icon}</div>
-                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Tab Navigation */}
+      {/* Tab Navigation - AI Tool Selection */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-subtle-bg">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
@@ -282,6 +258,30 @@ export default function Home() {
               {activeTab === 'voiceCloning' && <VoiceCloning />}
               {activeTab === 'talkingPortrait' && <TalkingPortrait />}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Demo Section */}
+      <section id="demo" className="py-16 px-4 sm:px-6 lg:px-8 bg-white/80">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">See FaceTalk in Action</h2>
+            <p className="text-lg text-gray-600">Experience the magic of AI-powered avatar generation</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            {features.map((feature, index) => (
+              <div 
+                key={feature.id} 
+                className="feature-card shadow-card hover:shadow-card-hover animate-fade-in"
+                style={{ animationDelay: `${index * 200}ms` }}
+              >
+                <div className="mb-4 text-facebook-blue">{feature.icon}</div>
+                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                <p className="text-gray-600">{feature.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>

@@ -76,15 +76,30 @@ export default function RootLayout({
               try {
                 console.log('Checking and resetting facetalk_points');
                 const currentPoints = localStorage.getItem('facetalk_points');
-                if (currentPoints === '96' || currentPoints === '100') {
-                  console.log('Resetting credits from', currentPoints, 'to 4');
+                console.log('Current credits value:', currentPoints);
+                
+                // Specifically check for and fix the 96 credits issue
+                if (currentPoints === '96' || currentPoints === '100' || parseInt(currentPoints) > 10) {
+                  console.log('Resetting incorrect credits value from', currentPoints, 'to 4');
                   localStorage.setItem('facetalk_points', '4');
                   
                   // Force reload the page to apply new credits
                   window.location.reload();
                 }
+                
+                // Also ensure we have a valid value set, default to 4 if not
+                if (!currentPoints || currentPoints === 'null' || currentPoints === 'undefined') {
+                  console.log('No credits value found, setting default of 4');
+                  localStorage.setItem('facetalk_points', '4');
+                }
               } catch (e) {
                 console.error('Error fixing credits:', e);
+                // Ensure we have a valid fallback
+                try {
+                  localStorage.setItem('facetalk_points', '4');
+                } catch (innerError) {
+                  console.error('Failed to set fallback credits:', innerError);
+                }
               }
             }
           `}

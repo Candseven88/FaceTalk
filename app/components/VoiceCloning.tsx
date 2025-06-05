@@ -28,7 +28,7 @@ export default function VoiceCloning() {
   const voiceSampleInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, userPlan } = useAuth();
   
   // Use the points system
   const { deductPoints, isDeducting, error: pointsError, getFeatureCost } = usePoints();
@@ -105,11 +105,12 @@ export default function VoiceCloning() {
   };
 
   // 保存生成结果到localStorage
-  const saveGenerationToLocalStorage = (result: string) => {
+  const saveGenerationToLocalStorage = (result: string, taskId: string) => {
     const generationData = {
       result,
       timestamp: new Date().toISOString(),
-      type: 'voiceCloning'
+      type: 'voiceCloning',
+      taskId
     };
     
     // 保存最后一次生成结果
@@ -165,6 +166,21 @@ export default function VoiceCloning() {
       return;
     }
 
+    // 检查是否是免费用户尝试使用功能
+    if (user && userPlan && userPlan.plan === 'free') {
+      const currentPoints = userPlan.pointsLeft;
+      if (currentPoints < 1) {
+        setError('Free users have limited usage. Please upgrade your plan for more features.');
+        
+        // Redirect to pricing page if not enough points
+        setTimeout(() => {
+          router.push('/pricing');
+        }, 3000);
+        
+        return;
+      }
+    }
+    
     // Check if user has enough points
     const hasEnoughPoints = await deductPoints('voiceCloning');
     
@@ -237,13 +253,25 @@ export default function VoiceCloning() {
         setAudioResult(outputUrl);
         
         // 保存结果到localStorage
-        saveGenerationToLocalStorage(outputUrl);
+        saveGenerationToLocalStorage(outputUrl, taskId);
         
         // 保存结果到Firestore
         await saveGenerationToFirestore(outputUrl);
         
+        // 更新任务状态为已完成 - 确保任务正确完成
+        console.log(`Voice cloning complete. Setting task ${taskId} as completed with output URL length: ${outputUrl.length}`);
+        
         // Complete the task in the tracking system
         completeTask(taskId, outputUrl);
+        
+        // Wait a short time and check if the task was correctly marked as completed
+        setTimeout(async () => {
+          const task = getTask(taskId);
+          if (!task || task.status !== 'completed') {
+            console.log('Voice cloning task not properly marked as completed, trying again...');
+            completeTask(taskId, outputUrl);
+          }
+        }, 1000);
       } else {
         throw new Error('No output generated');
       }

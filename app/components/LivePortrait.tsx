@@ -283,8 +283,20 @@ export default function LivePortrait() {
           : result.output;
         setVideoResult(outputUrl);
         
-        // 更新任务状态为已完成
+        // 更新任务状态为已完成 - 确保任务正确完成
+        console.log(`Generation complete. Setting task ${taskId} as completed with output:`, outputUrl);
+        
+        // First update the task with completed status
         completeTask(taskId, outputUrl);
+        
+        // Wait a short time and check if the task was correctly marked as completed
+        setTimeout(async () => {
+          const task = getTask(taskId);
+          if (!task || task.status !== 'completed') {
+            console.log('Task not properly marked as completed, trying again...');
+            completeTask(taskId, outputUrl);
+          }
+        }, 1000);
         
         // 保存结果到localStorage
         saveGenerationToLocalStorage(outputUrl, taskId);

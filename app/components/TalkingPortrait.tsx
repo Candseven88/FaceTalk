@@ -144,11 +144,12 @@ export default function TalkingPortrait() {
   };
 
   // 保存生成结果到localStorage
-  const saveGenerationToLocalStorage = (result: string) => {
+  const saveGenerationToLocalStorage = (result: string, taskId?: string) => {
     const generationData = {
       result,
       timestamp: new Date().toISOString(),
-      type: 'talkingPortrait'
+      type: 'talkingPortrait',
+      taskId
     };
     
     // 保存最后一次生成结果
@@ -297,13 +298,25 @@ export default function TalkingPortrait() {
         setProgress('Processing complete! Your talking portrait is ready.');
         
         // 保存结果到localStorage
-        saveGenerationToLocalStorage(outputUrl);
+        saveGenerationToLocalStorage(outputUrl, taskId);
         
         // 保存结果到Firestore
         await saveGenerationToFirestore(outputUrl);
         
+        // 更新任务状态为已完成 - 确保任务正确完成
+        console.log(`Talking portrait complete. Setting task ${taskId} as completed with output URL length: ${outputUrl.length}`);
+        
         // Complete the task in the tracking system
         completeTask(taskId, outputUrl);
+        
+        // Wait a short time and check if the task was correctly marked as completed
+        setTimeout(async () => {
+          const task = getTask(taskId);
+          if (!task || task.status !== 'completed') {
+            console.log('Talking portrait task not properly marked as completed, trying again...');
+            completeTask(taskId, outputUrl);
+          }
+        }, 1000);
       } else {
         throw new Error('No output generated');
       }
